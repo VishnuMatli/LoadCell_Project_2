@@ -1,0 +1,7 @@
+CMSIS_5/
+CMSIS-DSP/
+plots/
+venv/
+__pycache__/
+.vscode/
+CMS_New.zip

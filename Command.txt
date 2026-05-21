@@ -1,0 +1,22 @@
+gcc -I./CMSIS-DSP/Include -I./CMSIS_5/CMSIS/Core/Include -L./CMSIS-DSP/Source -o weigh weigh.c -larm_cortexM4l_math -lm -pthread
+
+
+gcc -I./CMSIS-DSP/Include \
+    -I./CMSIS_5/CMSIS/Core/Include \
+    filter_client.c \
+    ./CMSIS-DSP/Source/FilteringFunctions/arm_fir_f32.c \
+    ./CMSIS-DSP/Source/FilteringFunctions/arm_fir_init_f32.c \
+    ./CMSIS-DSP/Source/TransformFunctions/arm_rfft_fast_f32.c \
+    ./CMSIS-DSP/Source/TransformFunctions/arm_rfft_fast_init_f32.c \
+    ./CMSIS-DSP/Source/TransformFunctions/arm_cfft_f32.c \
+    ./CMSIS-DSP/Source/TransformFunctions/arm_cfft_init_f32.c \
+    ./CMSIS-DSP/Source/TransformFunctions/arm_bitreversal2.c \
+    ./CMSIS-DSP/Source/TransformFunctions/arm_radix8_butterfly_f32.c \
+    ./CMSIS-DSP/Source/ComplexMathFunctions/arm_cmplx_mag_f32.c \
+    ./CMSIS-DSP/Source/BasicMathFunctions/arm_abs_f32.c \
+    ./CMSIS-DSP/Source/BasicMathFunctions/arm_mult_f32.c \
+    ./CMSIS-DSP/Source/FastMathFunctions/arm_sin_f32.c \
+    ./CMSIS-DSP/Source/FastMathFunctions/arm_cos_f32.c \
+    ./CMSIS-DSP/Source/CommonTables/arm_common_tables.c \
+    ./CMSIS-DSP/Source/CommonTables/arm_const_structs.c \
+    -lm -pthread -o filter_client

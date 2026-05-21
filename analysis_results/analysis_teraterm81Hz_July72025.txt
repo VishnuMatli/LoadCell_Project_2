@@ -1,0 +1,4 @@
+Analysis for file: teraterm81Hz_July72025.txt
+Raw Data Peak-to-Peak Amplitude: 
+Raw Data Peak-to-Peak Amplitude: 202.9990
+Filtered Data Peak-to-Peak Amplitude: 30.5713
