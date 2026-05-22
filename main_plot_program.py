@@ -55,15 +55,21 @@ g_available_windows = []
 g_base_filename = ""
 g_selected_window = "rectangular"
 g_raw_data = np.array([])
+g_reference_filtered_data = np.array([])
 g_filtered_data = np.array([])
+g_manual_filtered_data = np.array([])
+g_manual_coeffs = np.array([])
+g_manual_mode = False
 g_animation = None
 g_interval_ms = DEFAULT_INTERVAL_MS
+g_coeffs_text_widget = None
 
 # Plot objects
 fig = None
 axes = None
 raw_line = None
 filtered_line = None
+manual_filtered_line = None
 control_frame = None
 stats_frame = None
 sidebar_canvas = None
@@ -187,6 +193,126 @@ def calculate_bandwidth(series):
     return float(np.nanmax(series) - np.nanmin(series))
 
 
+def parse_manual_coefficients(text):
+    tokens = re.split(r"[\s,;]+", text.strip())
+    coeffs = []
+    for token in tokens:
+        if not token:
+            continue
+        coeffs.append(float(token))
+    if not coeffs:
+        raise ValueError("Please enter at least one coefficient.")
+    return np.array(coeffs, dtype=float)
+
+
+def apply_manual_fir_filter(raw_series, coeffs):
+    if raw_series is None or len(raw_series) == 0:
+        return np.array([], dtype=float)
+    if coeffs is None or len(coeffs) == 0:
+        return np.zeros_like(raw_series, dtype=float)
+    filtered = np.convolve(np.asarray(raw_series, dtype=float), np.asarray(coeffs, dtype=float), mode="full")
+    return filtered[: len(raw_series)]
+
+
+def has_manual_output():
+    return g_manual_mode and g_manual_coeffs.size > 0 and g_manual_filtered_data.size > 0
+
+
+def current_filtered_series():
+    return g_manual_filtered_data if has_manual_output() else g_reference_filtered_data
+
+
+def get_difference_metrics():
+    if not has_manual_output() or g_reference_filtered_data.size == 0:
+        return None
+    compare_len = min(len(g_manual_filtered_data), len(g_reference_filtered_data))
+    if compare_len <= 0:
+        return None
+    diff = g_manual_filtered_data[:compare_len] - g_reference_filtered_data[:compare_len]
+    return {
+        "max_abs": float(np.max(np.abs(diff))),
+        "mean_abs": float(np.mean(np.abs(diff))),
+        "rmse": float(np.sqrt(np.mean(diff ** 2))),
+    }
+
+
+def format_status_text(prefix=None):
+    base = f"File: {g_base_filename} | Window: {g_selected_window} | Speed: {g_interval_ms} ms"
+    metrics = get_difference_metrics()
+    if metrics is not None:
+        base += (
+            f" | Manual coeffs ON | Max diff: {metrics['max_abs']:.4f}"
+            f" | Mean diff: {metrics['mean_abs']:.4f} | RMSE: {metrics['rmse']:.4f}"
+        )
+    if prefix:
+        return f"{prefix} | {base}"
+    return base
+
+
+def update_status_text(prefix=None):
+    if g_status_var is not None:
+        g_status_var.set(format_status_text(prefix))
+
+
+def update_display_mode():
+    if axes is None:
+        return
+
+    if has_manual_output():
+        filtered_line.set_visible(True)
+        manual_filtered_line.set_visible(True)
+        filtered_line.set_color("#7d8794")
+        filtered_line.set_linestyle("--")
+        filtered_line.set_linewidth(1.4)
+        filtered_line.set_label("Reference Filtered")
+        manual_filtered_line.set_color("#1f6feb")
+        manual_filtered_line.set_linestyle("-")
+        manual_filtered_line.set_linewidth(1.9)
+        manual_filtered_line.set_label("Manual FIR Output")
+        axes[1].set_title(f"Manual FIR Filtered Data vs Reference - {os.path.basename(g_base_filename)}", fontsize=12, weight="bold", color="#243043")
+    else:
+        filtered_line.set_visible(True)
+        manual_filtered_line.set_visible(False)
+        filtered_line.set_color("#1f6feb")
+        filtered_line.set_linestyle("-")
+        filtered_line.set_linewidth(1.8)
+        filtered_line.set_label("FIR Filtered Data")
+        manual_filtered_line.set_label("Manual FIR Output")
+        axes[1].set_title(f"FIR Filtered Data - {os.path.basename(g_base_filename)}", fontsize=12, weight="bold", color="#243043")
+
+    axes[1].legend(loc="upper right", frameon=True, facecolor="white")
+
+
+def recompute_manual_output():
+    global g_manual_filtered_data, g_filtered_data, g_manual_mode
+
+    if g_manual_coeffs.size == 0:
+        g_manual_filtered_data = np.array([], dtype=float)
+        g_manual_mode = False
+        g_filtered_data = g_reference_filtered_data
+        return
+
+    g_manual_filtered_data = apply_manual_fir_filter(g_raw_data, g_manual_coeffs)
+    g_filtered_data = g_manual_filtered_data
+    g_manual_mode = True
+
+
+def update_filter_summary():
+    raw_bandwidth = calculate_bandwidth(g_raw_data)
+    reference_bandwidth = calculate_bandwidth(g_reference_filtered_data)
+    display_bandwidth = calculate_bandwidth(current_filtered_series())
+    if g_bandwidth_var is not None:
+        if has_manual_output():
+            g_bandwidth_var.set(
+                f"Raw bandwidth: {raw_bandwidth:.2f}    |    Reference: {reference_bandwidth:.2f}    |    Manual: {display_bandwidth:.2f}"
+            )
+        else:
+            g_bandwidth_var.set(
+                f"Raw bandwidth: {raw_bandwidth:.2f}    |    Filtered bandwidth: {display_bandwidth:.2f}"
+            )
+    update_status_text()
+
+
 def update_bandwidth_labels():
     if g_bandwidth_var is None:
         return
@@ -209,7 +335,7 @@ def refresh_available_windows():
 
 
 def load_selected_data(base_filename=None, window_method=None):
-    global g_raw_data, g_filtered_data, g_base_filename, g_selected_window, g_available_windows
+    global g_raw_data, g_reference_filtered_data, g_filtered_data, g_base_filename, g_selected_window, g_available_windows
 
     if base_filename is not None:
         g_base_filename = os.path.basename(base_filename)
@@ -221,17 +347,25 @@ def load_selected_data(base_filename=None, window_method=None):
     g_selected_window = selected_window
 
     try:
-        g_filtered_data = load_filtered_data(g_base_filename, g_selected_window)
+        g_reference_filtered_data = load_filtered_data(g_base_filename, g_selected_window)
     except Exception as exc:
         print(f"[APP] {exc}")
-        g_filtered_data = np.zeros_like(g_raw_data)
+        g_reference_filtered_data = np.zeros_like(g_raw_data)
+
+    if has_manual_output():
+        recompute_manual_output()
+    else:
+        g_filtered_data = g_reference_filtered_data
 
 
 def update_plot_titles():
     base = os.path.basename(g_base_filename)
     if axes is not None:
         axes[0].set_title(f"Raw ADC Data - {base}")
-        axes[1].set_title(f"FIR Filtered Data ({g_selected_window}) - {base}")
+        if has_manual_output():
+            axes[1].set_title(f"Manual FIR Filtered Data vs Reference - {base}")
+        else:
+            axes[1].set_title(f"FIR Filtered Data ({g_selected_window}) - {base}")
 
 
 def set_visible_limits(frame):
@@ -258,8 +392,8 @@ def set_visible_limits(frame):
 
 
 def init_plot():
-    global fig, axes, raw_line, filtered_line, g_canvas, control_frame, stats_frame
-    global sidebar_canvas, sidebar_scrollbar, sidebar_inner
+    global fig, axes, raw_line, filtered_line, manual_filtered_line, g_canvas, control_frame, stats_frame
+    global sidebar_canvas, sidebar_scrollbar, sidebar_inner, g_coeffs_text_widget
 
     plt.close("all")
     fig = Figure(figsize=(12, 8), dpi=100)
@@ -269,6 +403,8 @@ def init_plot():
 
     raw_line, = axes[0].plot([], [], color="#e4572e", linewidth=1.8, label="Raw Data")
     filtered_line, = axes[1].plot([], [], color="#1f6feb", linewidth=1.8, label="FIR Filtered Data")
+    manual_filtered_line, = axes[1].plot([], [], color="#1f6feb", linewidth=1.8, linestyle="-", label="Manual FIR Output")
+    manual_filtered_line.set_visible(False)
 
     for axis, face, spine in (
         (axes[0], "#fff5ef", "#e4572e"),
@@ -380,6 +516,34 @@ def init_plot():
     section_label("Plot Speed").pack(fill=tk.X, padx=14)
     speed_combo = styled_combo(sidebar_inner, g_speed_var, SPEED_OPTIONS)
 
+    section_label("Manual FIR Coefficients").pack(fill=tk.X, padx=14)
+    coeff_help = tk.Label(
+        sidebar_inner,
+        text="Enter coefficients separated by spaces, commas, or new lines.",
+        bg="#1f2d3d",
+        fg="#8aa0bf",
+        wraplength=230,
+        justify="left",
+        pady=4,
+    )
+    coeff_help.pack(fill=tk.X, padx=14)
+
+    coeffs_text = tk.Text(
+        sidebar_inner,
+        height=5,
+        width=28,
+        bg="#f7fbff",
+        fg="#243043",
+        insertbackground="#243043",
+        relief="flat",
+        padx=8,
+        pady=8,
+        wrap="word",
+    )
+    coeffs_text.pack(fill=tk.X, padx=14, pady=(0, 10))
+    coeffs_text.insert("1.0", "0.25, 0.25, 0.25, 0.25")
+    g_coeffs_text_widget = coeffs_text
+
     action_panel = tk.Frame(sidebar_inner, bg="#1f2d3d")
     action_panel.pack(fill=tk.X, padx=14, pady=(6, 10))
 
@@ -399,6 +563,8 @@ def init_plot():
             pady=8,
         )
 
+    colored_button("Apply Manual Coeffs", "#7b4f01", apply_manual_coeffs_from_controls).pack(fill=tk.X, pady=(0, 6))
+    colored_button("Clear Manual Coeffs", "#5f6b7a", clear_manual_coeffs).pack(fill=tk.X, pady=(0, 6))
     colored_button("Pause", "#7b4f01", pause_animation).pack(fill=tk.X, pady=(0, 6))
     colored_button("Resume", "#0c7a46", resume_animation).pack(fill=tk.X, pady=(0, 6))
     colored_button("Reload", "#2952a3", reload_from_controls).pack(fill=tk.X, pady=(0, 6))
@@ -423,14 +589,16 @@ def init_plot():
 def update_frame(frame):
     x = np.arange(frame + 1)
     y_raw = g_raw_data[: frame + 1]
-    y_filt = g_filtered_data[: frame + 1]
+    y_ref = g_reference_filtered_data[: frame + 1]
+    y_filt = current_filtered_series()[: frame + 1]
 
     raw_line.set_data(x, y_raw)
-    filtered_line.set_data(x, y_filt)
+    filtered_line.set_data(x, y_ref)
+    manual_filtered_line.set_data(x, y_filt)
 
     set_visible_limits(frame)
 
-    return raw_line, filtered_line
+    return raw_line, filtered_line, manual_filtered_line
 
 
 def restart_animation():
@@ -438,7 +606,7 @@ def restart_animation():
     if g_animation and g_animation.event_source:
         g_animation.event_source.stop()
 
-    n = min(len(g_raw_data), len(g_filtered_data))
+    n = min(len(g_raw_data), len(current_filtered_series()))
     if n <= 0:
         print("[APP] No data to animate")
         return
@@ -458,40 +626,73 @@ def restart_animation():
         g_canvas.draw_idle()
 
 
+def apply_manual_coeffs_from_controls():
+    global g_manual_coeffs
+
+    if g_coeffs_text_widget is None:
+        return
+
+    coeff_text = g_coeffs_text_widget.get("1.0", tk.END)
+    try:
+        g_manual_coeffs = parse_manual_coefficients(coeff_text)
+    except Exception as exc:
+        update_status_text(f"Invalid manual coefficients: {exc}")
+        return
+
+    recompute_manual_output()
+    update_plot_titles()
+    update_display_mode()
+    update_filter_summary()
+    restart_animation()
+
+
+def clear_manual_coeffs():
+    global g_manual_coeffs, g_manual_filtered_data, g_filtered_data, g_manual_mode
+
+    g_manual_coeffs = np.array([])
+    g_manual_filtered_data = np.array([])
+    g_filtered_data = g_reference_filtered_data
+    g_manual_mode = False
+    update_plot_titles()
+    update_display_mode()
+    update_filter_summary()
+    restart_animation()
+
+
 def reload_filtered_and_restart():
-    global g_filtered_data
+    global g_reference_filtered_data, g_filtered_data
 
     try:
-        g_filtered_data = load_filtered_data(g_base_filename, g_selected_window)
+        g_reference_filtered_data = load_filtered_data(g_base_filename, g_selected_window)
     except Exception as e:
         print(f"[APP] {e}")
         # Keep existing data if available; otherwise zero array
-        if g_filtered_data.size == 0:
-            g_filtered_data = np.zeros_like(g_raw_data)
+        if g_reference_filtered_data.size == 0:
+            g_reference_filtered_data = np.zeros_like(g_raw_data)
+
+    if has_manual_output():
+        recompute_manual_output()
+    else:
+        g_filtered_data = g_reference_filtered_data
 
     update_plot_titles()
     if g_window_var is not None and g_window_var.get() != g_selected_window:
         g_window_var.set(g_selected_window)
-    if g_status_var is not None:
-        g_status_var.set(
-            f"File: {g_base_filename}\nWindow: {g_selected_window}\nSpeed: {g_interval_ms} ms"
-        )
-    update_bandwidth_labels()
+    update_display_mode()
+    update_filter_summary()
     restart_animation()
 
 
 def pause_animation():
     if g_animation and g_animation.event_source:
         g_animation.event_source.stop()
-        if g_status_var is not None:
-            g_status_var.set(f"Paused | File: {g_base_filename} | Window: {g_selected_window}")
+        update_status_text("Paused")
 
 
 def resume_animation():
     if g_animation and g_animation.event_source:
         g_animation.event_source.start()
-        if g_status_var is not None:
-            g_status_var.set(f"Running | File: {g_base_filename} | Window: {g_selected_window}")
+        update_status_text("Running")
 
 
 def reload_from_controls():
@@ -522,13 +723,13 @@ def on_speed_selected(_event):
         globals()["g_interval_ms"] = int(selected_speed[:-2])
         if g_animation and g_animation.event_source:
             g_animation.event_source.interval = g_interval_ms
-        if g_status_var is not None:
-            g_status_var.set(f"File: {g_base_filename} | Window: {g_selected_window} | Speed: {g_interval_ms} ms")
+        update_status_text()
         restart_animation()
 
 
 def main():
     global g_root, g_status_var, g_bandwidth_var, g_file_var, g_window_var, g_speed_var, g_available_files
+    global g_reference_filtered_data, g_filtered_data, g_manual_filtered_data, g_manual_coeffs, g_manual_mode
 
     g_available_files = list_available_input_files()
     if not g_available_files:
@@ -564,6 +765,11 @@ def main():
     load_selected_data(initial_file, g_selected_window)
     refresh_available_windows()
     g_window_var.set(g_selected_window)
+
+    g_manual_coeffs = np.array([])
+    g_manual_filtered_data = np.array([])
+    g_manual_mode = False
+    g_filtered_data = g_reference_filtered_data
 
     init_plot()
     reload_filtered_and_restart()
