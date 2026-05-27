@@ -30,6 +30,11 @@ WINDOW_METHODS = [
     "least_squares",
 ]
 SPEED_OPTIONS = ["5ms", "10ms", "20ms", "50ms", "100ms"]
+DEFAULT_COEFF_COUNT = 11
+CUTOFF_FREQ_HZ = 10.0
+SAMPLING_FREQ_HZ = 50.0
+KAISER_BETA = 5.0
+FILTER_START_DELAY_MS = 2000
 
 
 def get_frame_step(interval_ms):
@@ -62,7 +67,7 @@ g_manual_coeffs = np.array([])
 g_manual_mode = False
 g_animation = None
 g_interval_ms = DEFAULT_INTERVAL_MS
-g_coeffs_text_widget = None
+g_coeff_count_var = None
 
 # Plot objects
 fig = None
@@ -193,16 +198,70 @@ def calculate_bandwidth(series):
     return float(np.nanmax(series) - np.nanmin(series))
 
 
-def parse_manual_coefficients(text):
-    tokens = re.split(r"[\s,;]+", text.strip())
-    coeffs = []
-    for token in tokens:
-        if not token:
-            continue
-        coeffs.append(float(token))
-    if not coeffs:
-        raise ValueError("Please enter at least one coefficient.")
-    return np.array(coeffs, dtype=float)
+def get_filtered_delay_frames():
+    if g_interval_ms <= 0:
+        return 0
+    return max(0, int(round(FILTER_START_DELAY_MS / g_interval_ms)))
+
+
+def _normalized_sinc(n, alpha, cutoff_freq=CUTOFF_FREQ_HZ, sampling_freq=SAMPLING_FREQ_HZ):
+    fc = cutoff_freq / sampling_freq
+    if abs(float(n) - float(alpha)) < 1e-9:
+        return 2.0 * fc
+    return np.sin(2.0 * np.pi * fc * (float(n) - float(alpha))) / (np.pi * (float(n) - float(alpha)))
+
+
+def _kaiser_i0(x):
+    total = 1.0
+    term = 1.0
+    half_x = 0.5 * x
+    for k in range(1, 21):
+        term *= (half_x * half_x) / (float(k) * float(k))
+        total += term
+        if term < 1e-8:
+            break
+    return total
+
+
+def generate_window_coefficients(window_method, num_taps):
+    num_taps = int(num_taps)
+    if num_taps < 2:
+        raise ValueError("Number of coefficients must be at least 2.")
+
+    alpha = (num_taps - 1) / 2.0
+    coeffs = np.zeros(num_taps, dtype=float)
+    gain = 0.0
+
+    for n in range(num_taps):
+        sinc_val = _normalized_sinc(n, alpha)
+
+        if window_method == "rectangular":
+            window_value = 1.0
+        elif window_method == "triangular":
+            window_value = 1.0 - 2.0 * abs(float(n) - alpha) / (num_taps - 1)
+        elif window_method == "hamming":
+            window_value = 0.54 - 0.46 * np.cos(2.0 * np.pi * n / (num_taps - 1))
+        elif window_method == "hanning":
+            window_value = 0.5 - 0.5 * np.cos(2.0 * np.pi * n / (num_taps - 1))
+        elif window_method == "blackman":
+            window_value = (
+                0.42
+                - 0.5 * np.cos(2.0 * np.pi * n / (num_taps - 1))
+                + 0.08 * np.cos(4.0 * np.pi * n / (num_taps - 1))
+            )
+        elif window_method == "kaiser":
+            ratio = (float(n) - alpha) / alpha if alpha != 0 else 0.0
+            inside = max(0.0, 1.0 - ratio * ratio)
+            window_value = _kaiser_i0(KAISER_BETA * np.sqrt(inside)) / _kaiser_i0(KAISER_BETA)
+        else:
+            window_value = 0.54 - 0.46 * np.cos(2.0 * np.pi * n / (num_taps - 1))
+
+        coeffs[n] = sinc_val * window_value
+        gain += coeffs[n]
+
+    if abs(gain) > 1e-12:
+        coeffs /= gain
+    return coeffs
 
 
 def apply_manual_fir_filter(raw_series, coeffs):
@@ -241,7 +300,7 @@ def format_status_text(prefix=None):
     metrics = get_difference_metrics()
     if metrics is not None:
         base += (
-            f" | Manual coeffs ON | Max diff: {metrics['max_abs']:.4f}"
+            f" | Manual coeffs ON ({len(g_manual_coeffs)} taps) | Max diff: {metrics['max_abs']:.4f}"
             f" | Mean diff: {metrics['mean_abs']:.4f} | RMSE: {metrics['rmse']:.4f}"
         )
     if prefix:
@@ -268,7 +327,7 @@ def update_display_mode():
         manual_filtered_line.set_color("#1f6feb")
         manual_filtered_line.set_linestyle("-")
         manual_filtered_line.set_linewidth(1.9)
-        manual_filtered_line.set_label("Manual FIR Output")
+        manual_filtered_line.set_label(f"Manual FIR Output ({len(g_manual_coeffs)} taps)")
         axes[1].set_title(f"Manual FIR Filtered Data vs Reference - {os.path.basename(g_base_filename)}", fontsize=12, weight="bold", color="#243043")
     else:
         filtered_line.set_visible(True)
@@ -374,16 +433,36 @@ def set_visible_limits(frame):
 
     if len(g_raw_data) <= PLOT_WINDOW_SIZE:
         x_min = 0
-        x_max = max(len(g_raw_data), len(g_filtered_data), PLOT_WINDOW_SIZE)
+        x_max = max(len(g_raw_data), PLOT_WINDOW_SIZE)
     else:
         x_min = max(0, frame + 1 - PLOT_WINDOW_SIZE)
-        x_max = min(x_min + PLOT_WINDOW_SIZE, min(len(g_raw_data), len(g_filtered_data)))
+        x_max = min(x_min + PLOT_WINDOW_SIZE, len(g_raw_data))
 
     axes[0].set_xlim(x_min, x_max)
     axes[1].set_xlim(x_min, x_max)
 
     raw_limits = create_plot_limits(g_raw_data, x_min, x_max)
-    filtered_limits = create_plot_limits(g_filtered_data, x_min, x_max)
+    delay_frames = get_filtered_delay_frames()
+    filtered_visible_frame = frame - delay_frames
+
+    if filtered_visible_frame < 0:
+        filtered_limits = None
+    elif has_manual_output() and g_reference_filtered_data.size > 0:
+        display_end = min(filtered_visible_frame + 1, len(g_reference_filtered_data))
+        reference_limits = create_plot_limits(g_reference_filtered_data, 0, display_end)
+        manual_limits = create_plot_limits(g_manual_filtered_data, 0, display_end)
+        if reference_limits is None:
+            filtered_limits = manual_limits
+        elif manual_limits is None:
+            filtered_limits = reference_limits
+        else:
+            filtered_limits = (
+                min(reference_limits[0], manual_limits[0]),
+                max(reference_limits[1], manual_limits[1]),
+            )
+    else:
+        display_end = min(filtered_visible_frame + 1, len(g_filtered_data))
+        filtered_limits = create_plot_limits(g_filtered_data, 0, display_end)
 
     if raw_limits is not None:
         axes[0].set_ylim(*raw_limits)
@@ -393,7 +472,7 @@ def set_visible_limits(frame):
 
 def init_plot():
     global fig, axes, raw_line, filtered_line, manual_filtered_line, g_canvas, control_frame, stats_frame
-    global sidebar_canvas, sidebar_scrollbar, sidebar_inner, g_coeffs_text_widget
+    global sidebar_canvas, sidebar_scrollbar, sidebar_inner, g_coeff_count_var
 
     plt.close("all")
     fig = Figure(figsize=(12, 8), dpi=100)
@@ -516,10 +595,10 @@ def init_plot():
     section_label("Plot Speed").pack(fill=tk.X, padx=14)
     speed_combo = styled_combo(sidebar_inner, g_speed_var, SPEED_OPTIONS)
 
-    section_label("Manual FIR Coefficients").pack(fill=tk.X, padx=14)
+    section_label("Number of Coefficients").pack(fill=tk.X, padx=14)
     coeff_help = tk.Label(
         sidebar_inner,
-        text="Enter coefficients separated by spaces, commas, or new lines.",
+        text="Select the FIR tap count. Coefficients are generated from the chosen window method.",
         bg="#1f2d3d",
         fg="#8aa0bf",
         wraplength=230,
@@ -528,21 +607,20 @@ def init_plot():
     )
     coeff_help.pack(fill=tk.X, padx=14)
 
-    coeffs_text = tk.Text(
+    g_coeff_count_var = tk.StringVar(value=str(DEFAULT_COEFF_COUNT))
+    coeff_count_spin = tk.Spinbox(
         sidebar_inner,
-        height=5,
-        width=28,
+        from_=2,
+        to=201,
+        increment=1,
+        textvariable=g_coeff_count_var,
+        width=10,
         bg="#f7fbff",
         fg="#243043",
-        insertbackground="#243043",
         relief="flat",
-        padx=8,
-        pady=8,
-        wrap="word",
+        justify="left",
     )
-    coeffs_text.pack(fill=tk.X, padx=14, pady=(0, 10))
-    coeffs_text.insert("1.0", "0.25, 0.25, 0.25, 0.25")
-    g_coeffs_text_widget = coeffs_text
+    coeff_count_spin.pack(fill=tk.X, padx=14, pady=(0, 10))
 
     action_panel = tk.Frame(sidebar_inner, bg="#1f2d3d")
     action_panel.pack(fill=tk.X, padx=14, pady=(6, 10))
@@ -589,12 +667,25 @@ def init_plot():
 def update_frame(frame):
     x = np.arange(frame + 1)
     y_raw = g_raw_data[: frame + 1]
-    y_ref = g_reference_filtered_data[: frame + 1]
-    y_filt = current_filtered_series()[: frame + 1]
+    delay_frames = get_filtered_delay_frames()
+    filtered_visible_frame = frame - delay_frames
 
     raw_line.set_data(x, y_raw)
-    filtered_line.set_data(x, y_ref)
-    manual_filtered_line.set_data(x, y_filt)
+
+    if filtered_visible_frame >= 0:
+        filtered_x = np.arange(filtered_visible_frame + 1)
+        y_ref = g_reference_filtered_data[: filtered_visible_frame + 1]
+        filtered_line.set_data(filtered_x, y_ref)
+
+        if has_manual_output():
+            y_filt = g_manual_filtered_data[: filtered_visible_frame + 1]
+            manual_filtered_line.set_data(filtered_x, y_filt)
+        else:
+            y_filt = g_filtered_data[: filtered_visible_frame + 1]
+            manual_filtered_line.set_data(filtered_x, y_filt)
+    else:
+        filtered_line.set_data([], [])
+        manual_filtered_line.set_data([], [])
 
     set_visible_limits(frame)
 
@@ -606,7 +697,7 @@ def restart_animation():
     if g_animation and g_animation.event_source:
         g_animation.event_source.stop()
 
-    n = min(len(g_raw_data), len(current_filtered_series()))
+    n = len(g_raw_data)
     if n <= 0:
         print("[APP] No data to animate")
         return
@@ -629,14 +720,14 @@ def restart_animation():
 def apply_manual_coeffs_from_controls():
     global g_manual_coeffs
 
-    if g_coeffs_text_widget is None:
+    if g_coeff_count_var is None:
         return
 
-    coeff_text = g_coeffs_text_widget.get("1.0", tk.END)
     try:
-        g_manual_coeffs = parse_manual_coefficients(coeff_text)
+        coeff_count = int(g_coeff_count_var.get().strip())
+        g_manual_coeffs = generate_window_coefficients(g_selected_window, coeff_count)
     except Exception as exc:
-        update_status_text(f"Invalid manual coefficients: {exc}")
+        update_status_text(f"Invalid coefficient count: {exc}")
         return
 
     recompute_manual_output()
