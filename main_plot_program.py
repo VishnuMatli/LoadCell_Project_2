@@ -66,8 +66,13 @@ g_manual_filtered_data = np.array([])
 g_manual_coeffs = np.array([])
 g_manual_mode = False
 g_animation = None
+g_plot_running = False
 g_interval_ms = DEFAULT_INTERVAL_MS
 g_coeff_count_var = None
+g_filtered_only_var = None
+g_raw_axes_pos = None
+g_filtered_axes_pos = None
+g_filtered_only_axes_pos = None
 
 # Plot objects
 fig = None
@@ -198,10 +203,12 @@ def calculate_bandwidth(series):
     return float(np.nanmax(series) - np.nanmin(series))
 
 
-def get_filtered_delay_frames():
-    if g_interval_ms <= 0:
-        return 0
-    return max(0, int(round(FILTER_START_DELAY_MS / g_interval_ms)))
+def get_filtered_start_frame():
+    return len(g_raw_data)
+
+
+def is_filtered_only_mode():
+    return bool(g_filtered_only_var.get()) if g_filtered_only_var is not None else False
 
 
 def _normalized_sinc(n, alpha, cutoff_freq=CUTOFF_FREQ_HZ, sampling_freq=SAMPLING_FREQ_HZ):
@@ -317,6 +324,41 @@ def update_display_mode():
     if axes is None:
         return
 
+    filtered_only = is_filtered_only_mode()
+
+    if filtered_only:
+        if axes[0] is not None:
+            axes[0].set_visible(True)
+            axes[0].set_position(g_raw_axes_pos)
+        axes[1].set_position(g_filtered_axes_pos)
+        raw_line.set_visible(False)
+        filtered_line.set_visible(True)
+        manual_filtered_line.set_visible(False)
+
+        active_filtered_label = "Filtered Output"
+        if has_manual_output():
+            active_filtered_label = f"Manual FIR Output ({len(g_manual_coeffs)} taps)"
+        else:
+            active_filtered_label = "FIR Filtered Data"
+
+        filtered_line.set_color("#1f6feb")
+        filtered_line.set_linestyle("-")
+        filtered_line.set_linewidth(1.8)
+        filtered_line.set_label(active_filtered_label)
+        axes[0].set_title(f"Raw ADC Data - {os.path.basename(g_base_filename)}", fontsize=12, weight="bold", color="#243043")
+        axes[0].set_ylabel("Weight", color="#243043")
+        axes[1].set_title(f"Filtered Data - {os.path.basename(g_base_filename)}", fontsize=12, weight="bold", color="#243043")
+        axes[1].set_xlabel("Sample Index", color="#243043")
+        axes[1].set_ylabel("Weight", color="#243043")
+        axes[1].legend(loc="upper right", frameon=True, facecolor="white")
+        return
+
+    if axes[0] is not None:
+        axes[0].set_visible(True)
+        axes[0].set_position(g_raw_axes_pos)
+    axes[1].set_position(g_filtered_axes_pos)
+    raw_line.set_visible(True)
+
     if has_manual_output():
         filtered_line.set_visible(True)
         manual_filtered_line.set_visible(True)
@@ -361,6 +403,15 @@ def update_filter_summary():
     reference_bandwidth = calculate_bandwidth(g_reference_filtered_data)
     display_bandwidth = calculate_bandwidth(current_filtered_series())
     if g_bandwidth_var is not None:
+        if is_filtered_only_mode():
+            if has_manual_output():
+                g_bandwidth_var.set(
+                    f"Filtered bandwidth: {display_bandwidth:.2f}    |    Manual taps: {len(g_manual_coeffs)}"
+                )
+            else:
+                g_bandwidth_var.set(f"Filtered bandwidth: {display_bandwidth:.2f}")
+            update_status_text()
+            return
         if has_manual_output():
             g_bandwidth_var.set(
                 f"Raw bandwidth: {raw_bandwidth:.2f}    |    Reference: {reference_bandwidth:.2f}    |    Manual: {display_bandwidth:.2f}"
@@ -373,13 +424,7 @@ def update_filter_summary():
 
 
 def update_bandwidth_labels():
-    if g_bandwidth_var is None:
-        return
-    raw_bandwidth = calculate_bandwidth(g_raw_data)
-    filtered_bandwidth = calculate_bandwidth(g_filtered_data)
-    g_bandwidth_var.set(
-        f"Raw bandwidth: {raw_bandwidth:.2f}    |    Filtered bandwidth: {filtered_bandwidth:.2f}"
-    )
+    update_filter_summary()
 
 
 def refresh_available_windows():
@@ -431,38 +476,64 @@ def set_visible_limits(frame):
     if len(g_raw_data) == 0 or len(g_filtered_data) == 0:
         return
 
-    if len(g_raw_data) <= PLOT_WINDOW_SIZE:
-        x_min = 0
-        x_max = max(len(g_raw_data), PLOT_WINDOW_SIZE)
+    raw_total = len(g_raw_data)
+    filtered_total = len(current_filtered_series())
+    filtered_start = get_filtered_start_frame()
+    filtered_only = is_filtered_only_mode()
+
+    if filtered_only:
+        raw_visible_frame = -1
+        filtered_visible_frame = frame
+    elif frame < raw_total:
+        raw_visible_frame = frame
+        filtered_visible_frame = -1
     else:
-        x_min = max(0, frame + 1 - PLOT_WINDOW_SIZE)
-        x_max = min(x_min + PLOT_WINDOW_SIZE, len(g_raw_data))
+        raw_visible_frame = raw_total - 1
+        filtered_visible_frame = frame - filtered_start
 
-    axes[0].set_xlim(x_min, x_max)
-    axes[1].set_xlim(x_min, x_max)
+    if raw_total <= PLOT_WINDOW_SIZE:
+        raw_x_min = 0
+        raw_x_max = max(raw_total, PLOT_WINDOW_SIZE)
+    else:
+        if raw_visible_frame < raw_total - 1:
+            raw_x_min = max(0, raw_visible_frame + 1 - PLOT_WINDOW_SIZE)
+            raw_x_max = min(raw_x_min + PLOT_WINDOW_SIZE, raw_total)
+        else:
+            raw_x_min = max(0, raw_total - PLOT_WINDOW_SIZE)
+            raw_x_max = raw_total
 
-    raw_limits = create_plot_limits(g_raw_data, x_min, x_max)
-    delay_frames = get_filtered_delay_frames()
-    filtered_visible_frame = frame - delay_frames
+    if filtered_only:
+        if filtered_total <= PLOT_WINDOW_SIZE:
+            filtered_x_min = 0
+            filtered_x_max = max(filtered_total, PLOT_WINDOW_SIZE)
+        else:
+            filtered_x_min = max(0, filtered_visible_frame + 1 - PLOT_WINDOW_SIZE)
+            filtered_x_max = min(filtered_x_min + PLOT_WINDOW_SIZE, filtered_total)
+        raw_x_min = 0
+        raw_x_max = max(raw_total, PLOT_WINDOW_SIZE)
+    elif filtered_total <= PLOT_WINDOW_SIZE:
+        filtered_x_min = 0
+        filtered_x_max = max(filtered_total, PLOT_WINDOW_SIZE)
+    else:
+        if filtered_visible_frame < 0:
+            filtered_x_min = 0
+            filtered_x_max = PLOT_WINDOW_SIZE
+        else:
+            filtered_x_min = max(0, filtered_visible_frame + 1 - PLOT_WINDOW_SIZE)
+            filtered_x_max = min(filtered_x_min + PLOT_WINDOW_SIZE, filtered_total)
+
+    axes[0].set_xlim(raw_x_min, raw_x_max)
+    axes[1].set_xlim(filtered_x_min, filtered_x_max)
+
+    raw_limits = create_plot_limits(g_raw_data, raw_x_min, raw_x_max)
 
     if filtered_visible_frame < 0:
         filtered_limits = None
-    elif has_manual_output() and g_reference_filtered_data.size > 0:
-        display_end = min(filtered_visible_frame + 1, len(g_reference_filtered_data))
-        reference_limits = create_plot_limits(g_reference_filtered_data, 0, display_end)
-        manual_limits = create_plot_limits(g_manual_filtered_data, 0, display_end)
-        if reference_limits is None:
-            filtered_limits = manual_limits
-        elif manual_limits is None:
-            filtered_limits = reference_limits
-        else:
-            filtered_limits = (
-                min(reference_limits[0], manual_limits[0]),
-                max(reference_limits[1], manual_limits[1]),
-            )
     else:
-        display_end = min(filtered_visible_frame + 1, len(g_filtered_data))
-        filtered_limits = create_plot_limits(g_filtered_data, 0, display_end)
+        active_filtered_series = current_filtered_series()
+        display_end = min(filtered_visible_frame + 1, len(active_filtered_series))
+        display_start = max(0, display_end - PLOT_WINDOW_SIZE)
+        filtered_limits = create_plot_limits(active_filtered_series, display_start, display_end)
 
     if raw_limits is not None:
         axes[0].set_ylim(*raw_limits)
@@ -472,7 +543,8 @@ def set_visible_limits(frame):
 
 def init_plot():
     global fig, axes, raw_line, filtered_line, manual_filtered_line, g_canvas, control_frame, stats_frame
-    global sidebar_canvas, sidebar_scrollbar, sidebar_inner, g_coeff_count_var
+    global sidebar_canvas, sidebar_scrollbar, sidebar_inner, g_coeff_count_var, g_filtered_only_var
+    global g_raw_axes_pos, g_filtered_axes_pos, g_filtered_only_axes_pos
 
     plt.close("all")
     fig = Figure(figsize=(12, 8), dpi=100)
@@ -503,6 +575,10 @@ def init_plot():
     axes[1].set_xlabel("Sample Index", color="#243043")
     axes[1].set_ylabel("Weight", color="#243043")
     axes[1].legend(loc="upper right", frameon=True, facecolor="white")
+
+    g_raw_axes_pos = axes[0].get_position().frozen()
+    g_filtered_axes_pos = axes[1].get_position().frozen()
+    g_filtered_only_axes_pos = [g_filtered_axes_pos.x0, g_raw_axes_pos.y0, g_filtered_axes_pos.width, g_raw_axes_pos.height + g_filtered_axes_pos.height + 0.08]
 
     main_frame = tk.Frame(g_root, bg="#eef3fb")
     main_frame.pack(fill=tk.BOTH, expand=True)
@@ -595,6 +671,23 @@ def init_plot():
     section_label("Plot Speed").pack(fill=tk.X, padx=14)
     speed_combo = styled_combo(sidebar_inner, g_speed_var, SPEED_OPTIONS)
 
+    g_filtered_only_var = tk.BooleanVar(value=False)
+    filtered_only_check = tk.Checkbutton(
+        sidebar_inner,
+        text="Plot Only Filtered Data",
+        variable=g_filtered_only_var,
+        command=on_filtered_only_toggled,
+        bg="#1f2d3d",
+        fg="#bcd0ea",
+        activebackground="#1f2d3d",
+        activeforeground="#ffffff",
+        selectcolor="#17202b",
+        anchor="w",
+        padx=14,
+        pady=6,
+    )
+    filtered_only_check.pack(fill=tk.X, padx=14, pady=(0, 10))
+
     section_label("Number of Coefficients").pack(fill=tk.X, padx=14)
     coeff_help = tk.Label(
         sidebar_inner,
@@ -641,6 +734,8 @@ def init_plot():
             pady=8,
         )
 
+    colored_button("Start Plot", "#0c7a46", start_plot).pack(fill=tk.X, pady=(0, 6))
+    colored_button("Start Filtered Plot", "#2952a3", start_filtered_plot).pack(fill=tk.X, pady=(0, 6))
     colored_button("Apply Manual Coeffs", "#7b4f01", apply_manual_coeffs_from_controls).pack(fill=tk.X, pady=(0, 6))
     colored_button("Clear Manual Coeffs", "#5f6b7a", clear_manual_coeffs).pack(fill=tk.X, pady=(0, 6))
     colored_button("Pause", "#7b4f01", pause_animation).pack(fill=tk.X, pady=(0, 6))
@@ -665,24 +760,46 @@ def init_plot():
 
 
 def update_frame(frame):
-    x = np.arange(frame + 1)
-    y_raw = g_raw_data[: frame + 1]
-    delay_frames = get_filtered_delay_frames()
-    filtered_visible_frame = frame - delay_frames
+    filtered_only = is_filtered_only_mode()
+    raw_total = len(g_raw_data)
+    filtered_total = len(current_filtered_series())
+    filtered_start = get_filtered_start_frame()
 
-    raw_line.set_data(x, y_raw)
+    if filtered_only:
+        raw_visible_frame = -1
+        filtered_visible_frame = frame
+    elif frame < raw_total:
+        raw_visible_frame = frame
+        filtered_visible_frame = -1
+    else:
+        raw_visible_frame = raw_total - 1
+        filtered_visible_frame = frame - filtered_start
+
+    x = np.arange(raw_visible_frame + 1)
+    y_raw = g_raw_data[: raw_visible_frame + 1]
+
+    if filtered_only:
+        raw_line.set_data([], [])
+    else:
+        raw_line.set_data(x, y_raw)
 
     if filtered_visible_frame >= 0:
         filtered_x = np.arange(filtered_visible_frame + 1)
-        y_ref = g_reference_filtered_data[: filtered_visible_frame + 1]
-        filtered_line.set_data(filtered_x, y_ref)
-
-        if has_manual_output():
-            y_filt = g_manual_filtered_data[: filtered_visible_frame + 1]
-            manual_filtered_line.set_data(filtered_x, y_filt)
+        if filtered_only:
+            active_filtered_series = current_filtered_series()
+            y_ref = active_filtered_series[: min(filtered_visible_frame + 1, len(active_filtered_series))]
+            filtered_line.set_data(filtered_x, y_ref)
+            manual_filtered_line.set_data([], [])
         else:
-            y_filt = g_filtered_data[: filtered_visible_frame + 1]
-            manual_filtered_line.set_data(filtered_x, y_filt)
+            y_ref = g_reference_filtered_data[: min(filtered_visible_frame + 1, len(g_reference_filtered_data))]
+            filtered_line.set_data(filtered_x, y_ref)
+
+            if has_manual_output():
+                y_filt = g_manual_filtered_data[: min(filtered_visible_frame + 1, len(g_manual_filtered_data))]
+                manual_filtered_line.set_data(filtered_x, y_filt)
+            else:
+                y_filt = g_filtered_data[: min(filtered_visible_frame + 1, len(g_filtered_data))]
+                manual_filtered_line.set_data(filtered_x, y_filt)
     else:
         filtered_line.set_data([], [])
         manual_filtered_line.set_data([], [])
@@ -697,7 +814,12 @@ def restart_animation():
     if g_animation and g_animation.event_source:
         g_animation.event_source.stop()
 
-    n = len(g_raw_data)
+    if not g_plot_running:
+        if g_canvas is not None:
+            g_canvas.draw_idle()
+        return
+
+    n = len(current_filtered_series()) if is_filtered_only_mode() else len(g_raw_data) + len(current_filtered_series())
     if n <= 0:
         print("[APP] No data to animate")
         return
@@ -732,6 +854,32 @@ def apply_manual_coeffs_from_controls():
 
     recompute_manual_output()
     update_plot_titles()
+    update_display_mode()
+    update_filter_summary()
+    restart_animation()
+
+
+def on_filtered_only_toggled():
+    update_display_mode()
+    update_filter_summary()
+    restart_animation()
+
+
+def start_plot():
+    global g_plot_running
+    g_plot_running = True
+    if g_filtered_only_var is not None:
+        g_filtered_only_var.set(False)
+    update_display_mode()
+    update_filter_summary()
+    restart_animation()
+
+
+def start_filtered_plot():
+    global g_plot_running
+    g_plot_running = True
+    if g_filtered_only_var is not None:
+        g_filtered_only_var.set(True)
     update_display_mode()
     update_filter_summary()
     restart_animation()
@@ -821,6 +969,7 @@ def on_speed_selected(_event):
 def main():
     global g_root, g_status_var, g_bandwidth_var, g_file_var, g_window_var, g_speed_var, g_available_files
     global g_reference_filtered_data, g_filtered_data, g_manual_filtered_data, g_manual_coeffs, g_manual_mode
+    global g_plot_running
 
     g_available_files = list_available_input_files()
     if not g_available_files:
@@ -861,9 +1010,11 @@ def main():
     g_manual_filtered_data = np.array([])
     g_manual_mode = False
     g_filtered_data = g_reference_filtered_data
+    g_plot_running = False
 
     init_plot()
-    reload_filtered_and_restart()
+    update_display_mode()
+    update_filter_summary()
     update_bandwidth_labels()
 
     print(f"[APP] Plotter ready. Initial file: {g_base_filename}")
