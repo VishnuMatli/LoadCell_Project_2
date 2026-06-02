@@ -33,6 +33,7 @@ The project is focused on experimenting with different FIR design and windowing 
 - `plots/` - exported PNG plots grouped by method
 - `main_plot_program.py` - interactive plotting GUI
 - `save_all_plots.py` - batch plot exporter + progress GUI + Excel summary
+- `weigh_cell_simulator.py` - virtual weigh cell simulator with scaling, tare, zero-scaling, and machine status blinking
 - `new_run.sh` - automation script for filtering all files and launching the GUI
 - `Makefile` - builds all analyzer executables
 - `signal_analyzer_*.c` - one standalone C analyzer per filtering method
@@ -107,6 +108,23 @@ The Excel sheet stores:
 - raw min/max
 - filtered min/max
 - output image path
+
+## Virtual Weigh Cell Simulator
+
+Launch the standalone simulator with:
+
+```bash
+python3 weigh_cell_simulator.py
+```
+
+The simulator currently covers the requested weigh-cell features:
+
+- scaling
+- zero-scaling
+- auto-scaling
+- tare
+- start machine / stop machine
+- status blinker
 
 ## Build Targets
 
