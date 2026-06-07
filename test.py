@@ -1,14 +1,15 @@
 import random
+import os
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 
 
 class ModernWeighCellSimulator(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Sartorius WZB Series - Virtual Weigh Cell Environment")
-        self.geometry("1080x780")
-        self.minsize(1040, 720)
+        self.geometry("1080x820")
+        self.minsize(1040, 760)
         
         # Core Simulation State Variables
         self.machine_running = False
@@ -23,11 +24,21 @@ class ModernWeighCellSimulator(tk.Tk):
         self.self_test_active = False
         self.adjustment_state = "idle"
         
+        # Sensor Log File Stream Buffers
+        self.file_stream_buffer = []
+        self.file_stream_index = 0
+        self.is_file_stream_active = False
+        self.loaded_file_path = ""
+        
+        # Calibration Reference Constant Mapping (Based on 535g Sensor Characteristics)
+        self.adc_reference_scale = 535.0 / 44347000.0  
+        
         # Command Bus Buffers & Transceiver Registers
         self.command_history = []
         self.xbpi_address = 0x00
         
-        # String Variables for Dynamic UI Telemetry Tracking
+        # String and Numeric Variables for Dynamic UI Telemetry Tracking
+        self.load_var = tk.DoubleVar(value=self.target_load)
         self.status_text = tk.StringVar(value="SYSTEM OFFLINE")
         self.display_text = tk.StringVar(value="------")
         self.raw_text = tk.StringVar(value="Raw Signal : 0.0000 g")
@@ -35,6 +46,7 @@ class ModernWeighCellSimulator(tk.Tk):
         self.zero_text = tk.StringVar(value="Zero Ref   : 0.0000 g")
         self.tare_text = tk.StringVar(value="Tare Base  : 0.0000 g")
         self.command_status_text = tk.StringVar(value="BUS PROTOCOL CONSOLE: STANDBY")
+        self.stream_status_text = tk.StringVar(value="DATA STREAM: MANUAL MODE")
 
         self._apply_theme_styles()
         self._build_hardware_layout()
@@ -152,7 +164,7 @@ class ModernWeighCellSimulator(tk.Tk):
         ttk.Label(matrix_box, textvariable=self.tare_text, style="Metric.TLabel", background="#0D111A").pack(anchor="w", pady=2)
         ttk.Label(matrix_box, textvariable=self.command_status_text, style="Metric.TLabel", background="#0D111A", foreground="#00E676").pack(anchor="w", pady=2)
 
-        # Integrated RS232/xBPI Serial Transceiver Logs Window
+        # Integrated RS232 Serial Transceiver Logs Window
         ttk.Label(parent, text="UNIVERSAL SERIAL BUS TRANSPOND MONITOR (HEX & ASCII LOGS)", style="CardTitle.TLabel").pack(anchor="w", pady=(6, 4))
         self.message = tk.Text(parent, height=8, wrap="word", bg="#06090E", fg="#A0AEC0", insertbackground="#E2E8F0", relief="flat", highlightbackground="#222A3A", highlightthickness=1, font=("Consolas", 9))
         self.message.pack(fill="both", expand=True)
@@ -167,12 +179,25 @@ class ModernWeighCellSimulator(tk.Tk):
         ttk.Button(power_row, text="START WEIGH CELL", style="Start.TButton", command=self.start_machine).pack(side="left")
         ttk.Button(power_row, text="STOP INTEL CIRCUIT", style="Stop.TButton", command=self.stop_machine).pack(side="left", padx=10)
 
-        # Module 2: Mass Receptor Simulator Layer
-        ttk.Label(parent, text="SIMULATED MASS RECEPTOR LOAD CONTROL", style="CardTitle.TLabel").pack(anchor="w")
+        # Module 2: Hardware Sensor Log Data Ingestion Station
+        ttk.Label(parent, text="TRANSDUCER SENSOR DATA INGESTION ENGINE", style="CardTitleX.TLabel").pack(anchor="w")
+        ingest_row = ttk.Frame(parent, style="Card.TFrame")
+        ingest_row.pack(fill="x", pady=(8, 14))
+        
+        btn_import = ttk.Button(ingest_row, text="Import Hardware Log (.txt)", style="Action.TButton", command=self._import_sensor_log_file)
+        btn_import.pack(side="left")
+        
+        btn_toggle_mode = ttk.Button(ingest_row, text="Toggle Source Mode", style="Action.TButton", command=self._toggle_stream_source_mode)
+        btn_toggle_mode.pack(side="left", padx=10)
+        
+        self.lbl_stream_status = ttk.Label(ingest_row, textvariable=self.stream_status_text, style="Metric.TLabel", foreground="#00E5FF")
+        self.lbl_stream_status.pack(side="left", padx=5)
+
+        # Module 3: Mass Receptor Simulator Layer
+        ttk.Label(parent, text="SIMULATED MASS RECEPTOR LOAD CONTROL (MANUAL MODE)", style="CardTitle.TLabel").pack(anchor="w")
         slider_row = ttk.Frame(parent, style="Card.TFrame")
         slider_row.pack(fill="x", pady=(8, 14))
         
-        self.load_var = tk.DoubleVar(value=self.target_load)
         self.load_slider = tk.Scale(
             slider_row, from_=0, to=8200, orient="horizontal", resolution=1,
             variable=self.load_var, bg="#161B26", fg="#A0AEC0", troughcolor="#0D111A",
@@ -189,7 +214,7 @@ class ModernWeighCellSimulator(tk.Tk):
         self.load_lbl_hint = ttk.Label(slider_row, text="Current Targeted Receptor Mass: 120.0000 g", style="SubTitle.TLabel")
         self.load_lbl_hint.pack(anchor="w", pady=(4, 0))
 
-        # Module 3: Local Local Manual Calibration Trimming
+        # Module 4: Metrological Local Manual Calibration Trimming
         ttk.Label(parent, text="MANUAL HARDWARE TRIMMING STATIONS", style="CardTitle.TLabel").pack(anchor="w")
         cal_grid = ttk.Frame(parent, style="Card.TFrame")
         cal_grid.pack(fill="x", pady=(8, 10))
@@ -220,7 +245,7 @@ class ModernWeighCellSimulator(tk.Tk):
         ttk.Button(footer_triggers, text="Tare System Offset", style="Action.TButton", command=self.execute_tare).pack(side="left", expand=True, fill="x", padx=3)
         ttk.Button(footer_triggers, text="Reset Local Calibration", style="Action.TButton", command=self.reset_entire_pipeline).pack(side="left", expand=True, fill="x", padx=(3, 0))
 
-        # Module 4: Dual Standard Serial Transceiver Intercept Terminal
+        # Module 5: Remote Interface Connection Engine Terminal
         ttk.Label(parent, text="SERIAL REMOTE COMMAND CONSOLE LINK", style="CardTitleX.TLabel").pack(anchor="w")
         command_box = ttk.Frame(parent, style="Card.TFrame")
         command_box.pack(fill="x", pady=(8, 0))
@@ -229,7 +254,7 @@ class ModernWeighCellSimulator(tk.Tk):
         self.protocol_mode = "xBPI"  
         mode_row = ttk.Frame(command_box, style="Card.TFrame")
         mode_row.pack(fill="x", pady=(0, 4))
-        self.lbl_mode_indicator = ttk.Label(mode_row, text="Active Protocol Decoder: SARTORIUS xBPI COMPILER MODE (BINARY TRANSLATION)", font=("Segoe UI", 9, "bold"), foreground="#000000")
+        self.lbl_mode_indicator = ttk.Label(mode_row, text="Active Protocol Decoder: SARTORIUS xBPI COMPILER MODE (BINARY TRANSLATION)", font=("Segoe UI", 9, "bold"), foreground="#00E5FF")
         self.lbl_mode_indicator.pack(side="left")
         
         entry_row = ttk.Frame(command_box, style="Card.TFrame")
@@ -245,6 +270,55 @@ class ModernWeighCellSimulator(tk.Tk):
             style="SubTitle.TLabel", justify="left"
         )
         self.lbl_syntax_hint.pack(anchor="w", pady=(4, 0))
+
+    def _import_sensor_log_file(self):
+        """Opens standard OS system prompt to read ADC hardware configuration dataset values."""
+        file_path = filedialog.askopenfilename(
+            filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")]
+        )
+        if not file_path:
+            return
+
+        try:
+            temp_buffer = []
+            with open(file_path, "r") as f:
+                for line in f:
+                    cleaned = line.strip()
+                    if cleaned.startswith("ADC:"):
+                        try:
+                            adc_val = float(cleaned.split(":")[1])
+                            temp_buffer.append(adc_val)
+                        except (IndexError, ValueError):
+                            continue
+            
+            if not temp_buffer:
+                messagebox.showerror("Parse Fault", "The dataset structure contains no recognizable 'ADC:xxxxxxxx' notation syntax.")
+                return
+
+            self.file_stream_buffer = temp_buffer
+            self.file_stream_index = 0
+            self.loaded_file_path = os.path.basename(file_path)
+            self.is_file_stream_active = True
+            
+            self.stream_status_text.set(f"DATA STREAM: {self.loaded_file_path}")
+            self._log(f"[INGEST] File payload resolved successfully. Cached {len(self.file_stream_buffer)} data points from dataset: {self.loaded_file_path}")
+            
+        except Exception as e:
+            messagebox.showerror("I/O System Error", f"Failed to ingest raw stream data: {str(e)}")
+
+    def _toggle_stream_source_mode(self):
+        """Switches the hardware tracking pipeline between file playback and the manual slider."""
+        if not self.file_stream_buffer:
+            messagebox.showwarning("Pipeline Interlock", "Cannot toggle tracking mode before loading an external calibration file dataset.")
+            return
+
+        self.is_file_stream_active = not self.is_file_stream_active
+        if self.is_file_stream_active:
+            self.stream_status_text.set(f"DATA STREAM: {self.loaded_file_path}")
+            self._log("[SYSTEM] Sensor core re-routed to tracking data stream.")
+        else:
+            self.stream_status_text.set("DATA STREAM: MANUAL MODE")
+            self._log("[SYSTEM] Sensor core reverted to manual target slider tracks.")
 
     def _log(self, text):
         self.message.configure(state="normal")
@@ -264,16 +338,23 @@ class ModernWeighCellSimulator(tk.Tk):
 
     def _inject_preset_load(self, target_mass):
         """Forces the sensor input layer to an explicit precise metric coordinate."""
+        self.is_file_stream_active = False
+        self.stream_status_text.set("DATA STREAM: MANUAL MODE")
         self.load_var.set(target_mass)
         self._on_slider_adjustment(target_mass)
-        self._log(f"[HARDWARE] Automated mass injection device dispatched reference weight: {target_mass:,.4f} g onto pan.")
+        self._log(f"[HARDWARE] Reference mass override: {target_mass:,.4f} g applied onto pan.")
 
     def _generate_live_signal(self):
         """Generates continuous physical transducer inputs matched with structural micro-fluctuations."""
-        environmental_noise = random.uniform(-0.024, 0.024)
-        vibration_drift = 0.0012 * self.noise_seed
-        self.noise_seed = (self.noise_seed + 0.5) % 500.0
-        return max(0.0, self.simulated_load + environmental_noise + vibration_drift)
+        if self.is_file_stream_active and self.file_stream_buffer:
+            raw_adc = self.file_stream_buffer[self.file_stream_index]
+            self.file_stream_index = (self.file_stream_index + 1) % len(self.file_stream_buffer)
+            return raw_adc * self.adc_reference_scale
+        else:
+            environmental_noise = random.uniform(-0.024, 0.024)
+            vibration_drift = 0.0012 * self.noise_seed
+            self.noise_seed = (self.noise_seed + 0.5) % 500.0
+            return max(0.0, self.simulated_load + environmental_noise + vibration_drift)
 
     def _process_calibrated_weight(self, source_signal):
         """Converts raw voltage sensor telemetry streams into final legal metrology outputs."""
@@ -303,17 +384,17 @@ class ModernWeighCellSimulator(tk.Tk):
             messagebox.showerror("Validation Fault", "Invalid numerical entry matrix. Input floating-point scaling parameters.")
             return
         if factor <= 0:
-            messagebox.showerror("Range Fault", "Metrological conversion scaling vectors must execute above absolute zero configuration parameters.")
+            messagebox.showerror("Range Fault", "Metrological conversion scaling vectors must execute above absolute zero parameters.")
             return
         self.scale_factor = factor
         self.scale_text.set(f"Multiplier : {self.scale_factor:.6f}")
-        self._log(f"[CAL] Local calibration array scaling updated to factor value: {self.scale_factor:.6f}")
+        self._log(f"[CAL] Local calibration scaling updated to: {self.scale_factor:.6f}")
 
     def execute_zero_scaling(self):
         current_raw = self._generate_live_signal() if self.machine_running else self.simulated_load
         self.zero_reference = current_raw
         self.zero_text.set(f"Zero Ref   : {self.zero_reference:,.4f} g")
-        self._log(f"[CAL] Local hardware static zero reference balance point stored at: {self.zero_reference:,.4f} g")
+        self._log(f"[CAL] Local zero reference configuration stored at: {self.zero_reference:,.4f} g")
 
     def execute_tare(self):
         current_raw = self._generate_live_signal() if self.machine_running else self.simulated_load
@@ -350,9 +431,9 @@ class ModernWeighCellSimulator(tk.Tk):
         self.scale_text.set("Multiplier : 1.000000")
         self.zero_text.set("Zero Ref   : 0.0000 g")
         self.tare_text.set("Tare Base  : 0.0000 g")
-        self._log("[CAL] Metrological alignment data registers purged. Reverted to raw sensor unity profile.")
+        self._log("[CAL] Data registers purged. Configuration reverted to raw sensor unity profile.")
 
-    # --- Core Serial Remote Link Engines ---
+    # --- Core Remote Link Engines ---
     def send_command(self):
         raw_input = self.command_var.get().strip()
         if not raw_input:
@@ -391,7 +472,7 @@ class ModernWeighCellSimulator(tk.Tk):
         if len(data) != length_byte + 1: 
             return bytes([0x03, 0x41, 0x95])  
 
-        # Modulo-256 Checksum Validation
+        # Checksum calculation matrix verification
         expected_checksum = data[-1]
         computed_checksum = sum(data[:-1]) % 256
         if computed_checksum != expected_checksum:
@@ -445,7 +526,7 @@ class ModernWeighCellSimulator(tk.Tk):
         return bytes(final_tx_packet)
 
     def _process_legacy_rs232_ascii(self, cmd: str) -> str:
-        """Processes core ASCII instructions."""
+        """Processes textual ASCII instructions."""
         if cmd in {"ESC T", "ESC TARE", "TARE"}:
             self.execute_tare()
             self.adjustment_state = "tared"
@@ -489,7 +570,9 @@ class ModernWeighCellSimulator(tk.Tk):
     def _simulation_engine_tick(self):
         """Asynchronous cycle managing continuous measurement logic updates."""
         if self.machine_running:
-            self.simulated_load += (self.target_load - self.simulated_load) * 0.12
+            if not self.is_file_stream_active:
+                self.simulated_load += (self.target_load - self.simulated_load) * 0.12
+            
             raw_signal = self._generate_live_signal()
             transformed_net_weight = self._process_calibrated_weight(raw_signal)
             self.last_display_value = transformed_net_weight
@@ -507,7 +590,10 @@ class ModernWeighCellSimulator(tk.Tk):
                 self.status_text.set("ONLINE | METROLOGY RUNNING" if not self.blink_on else "ONLINE | DATA BUS ACTIVE")
         else:
             self.display_text.set("OFFLINE")
-            self.raw_text.set(f"Raw Signal : {self.simulated_load:,.4f} g")
+            if self.is_file_stream_active and self.file_stream_buffer:
+                self.raw_text.set(f"Raw Signal : [STREAM PAUSED] {self.file_stream_buffer[self.file_stream_index] * self.adc_reference_scale:,.4f} g")
+            else:
+                self.raw_text.set(f"Raw Signal : {self.simulated_load:,.4f} g")
 
         self.after(50, self._simulation_engine_tick)
 
