@@ -370,7 +370,7 @@ class ModernWeighCellSimulator(tk.Tk):
             self._set_command_status(tx_frame)
         else:
             self.protocol_mode = "xBPI"
-            self.lbl_mode_indicator.config(text="Active Protocol Decoder: SARTORIUS xBPI COMPILER MODE (BINARY TRANSLATION)", foreground="#00E676")
+            self.lbl_mode_indicator.config(text="Active Protocol Decoder: SARTORIUS xBPI COMPILER MODE (BINARY TRANSLATION)", foreground="#000000")
             try:
                 byte_array = bytes.fromhex(raw_input)
                 tx_bytes = self._process_binary_xbpi_frame(byte_array)
