@@ -8,10 +8,10 @@ class ModernWeighCellSimulator(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Sartorius CAS Suite - Weigh Cell Emulation Environment")
-        self.geometry("1400x860")
-        self.minsize(1240, 800)
+        self.geometry("1420x860")
+        self.minsize(1200, 780)
         
-        # Core Simulation State Variables
+        # 1. Core Metrological Registry States
         self.machine_running = False
         self.blink_on = False
         self.zero_reference = 0.0
@@ -24,7 +24,7 @@ class ModernWeighCellSimulator(tk.Tk):
         self.self_test_active = False
         self.adjustment_state = "idle"
         
-        # --- CAS CONFIGURATION PARAMETER TRACKING REGISTERS ---
+        # --- CAS PARAMETER LOGIC STATE REGISTERS ---
         # 1.1 Balance Parameters
         self.active_env_filter = "1.1.1.2"        
         self.active_app_filter = "1.1.2.1"        
@@ -52,12 +52,12 @@ class ModernWeighCellSimulator(tk.Tk):
         self.print_output_format = "3.1.4.1"      
         self.print_trigger_type = "3.2.1.2"       
         self.print_layout_format = "3.2.2.2"      
-        self.print_appl_param = "3.2.3.2"         # Default updated to: All parameters
-        self.print_glp_protocol = "3.2.4.1"       # New Parameter: GLP Protocol Off
+        self.print_appl_param = "3.2.3.2"         
+        self.print_glp_protocol = "3.2.4.1"       
         
-        # 2.3 PC Direct Parameters Subsection (New Mappings)
-        self.pc_decimal_separator = "3.3.1.1"     # Factory Default: Point
-        self.pc_output_format = "3.3.2.1"         # Factory Default: Text and numerical value
+        # 2.3 PC Direct Parameters
+        self.pc_decimal_separator = "3.3.1.1"     
+        self.pc_output_format = "3.3.2.1"         
 
         # Digital Signal Processing Buffers
         self.filter_history_buffer = []
@@ -73,7 +73,7 @@ class ModernWeighCellSimulator(tk.Tk):
         self.adc_reference_scale = 535.0 / 44347000.0  
         self.command_history = []
 
-        # Variable Allocation
+        # 2. Variable Allocation
         self.load_var = tk.DoubleVar(value=self.target_load)
         self.status_text = tk.StringVar(value="EMULATOR BUS CORE: STANDBY")
         self.display_text = tk.StringVar(value="------")
@@ -84,7 +84,7 @@ class ModernWeighCellSimulator(tk.Tk):
         self.command_status_text = tk.StringVar(value="REMOTE BUS CONTROL: STANDBY")
         self.stream_status_text = tk.StringVar(value="INPUT TRACK: BALANCED SLIDER")
 
-        # Setup Layout Configuration Theme (Guaranteed Safe Declaration Sequence)
+        # 3. Apply Theme Styles & Build Responsive Layout Architecture
         self._apply_theme_styles()
         self._build_hardware_layout()
         self.protocol("WM_DELETE_WINDOW", self._on_safe_close)
@@ -138,7 +138,7 @@ class ModernWeighCellSimulator(tk.Tk):
         style.map("Treeview", background=[("selected", "#334155")], foreground=[("selected", "#38BDF8")])
 
     # =========================================================================
-    # CORE REGS & BUSINESS ACTION LOGIC - DECLARED SAFE BEFORE UI MAPS CALLS
+    # CORE REGS & METHOD ACTION LOGIC - DECLARED AT TOP TO ENSURE INTEGRITY
     # =========================================================================
     def _write_terminal_log(self, text):
         self.message.configure(state="normal")
@@ -193,7 +193,7 @@ class ModernWeighCellSimulator(tk.Tk):
                     self._write_terminal_log("[SECURITY LOCK] Balance physical interface button keys are BLOCKED.")
             elif param_group == "1.1.10":
                 self.active_adjust_process = target_code
-                self._write_terminal_log(f"[CAS SETTINGS] Pre-calibration process sequence layout -> {target_code}")
+                self._write_terminal_log(f"[CAS SETTINGS] Pre-calibration pipeline execution structure -> {target_code}")
             elif param_group == "1.1.11":
                 self.active_zero_range = target_code
                 self._write_terminal_log(f"[CAS SETTINGS] Manual zero-point threshold range limit -> {target_code}")
@@ -291,7 +291,6 @@ class ModernWeighCellSimulator(tk.Tk):
         self.active_output_rate = "1.1.14.1"
         self.active_isocal = "1.1.15.1"
         
-        # Reset Print and PC connection tables
         self.print_data_output = "3.1.1.1"
         self.print_cancel_auto = "3.1.2.1"
         self.print_cycle_auto = "3.1.3.1"
@@ -445,15 +444,21 @@ class ModernWeighCellSimulator(tk.Tk):
         if cmd in {"ESC V", "ZERO"}: self.execute_zero_scaling(); return "ZERO ACK"
         return f"WT + {self.last_display_value:,.4f} g"
 
-    # --- USER INTERFACE LAYOUT STRUCTURE DESIGN ---
+    # =========================================================================
+    # RESPONSIVE GRID WINDOW LAYOUT STRUCTURAL DEFINITION CORES
+    # =========================================================================
     def _build_hardware_layout(self):
-        """Constructs an integrated master container splitting work cells from header rows cleanly."""
+        """Constructs an integrated master container configuration supporting fully responsive scaling boundaries."""
+        # Enable multi-axis window expansion calculations on root app context
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
+
         master_content_container = ttk.Frame(self, style="TFrame")
         master_content_container.pack(fill="both", expand=True, padx=20, pady=20)
 
+        # Main configuration header bar row allocations
         header_frame = ttk.Frame(master_content_container, style="TFrame")
         header_frame.pack(fill="x", pady=(0, 15))
-        
         header_frame.columnconfigure(0, weight=1)
         header_frame.columnconfigure(1, weight=0)
 
@@ -463,28 +468,31 @@ class ModernWeighCellSimulator(tk.Tk):
         ttk.Label(title_text_subcontainer, text="SARTORIUS CAS CONFIGURATION & WEIGH SIMULATION SUITE", style="MainTitle.TLabel").pack(anchor="w")
         ttk.Label(title_text_subcontainer, text="High-precision multi-protocol test bench workspace running parallel xBPI and RS232 telemetry data registers.", style="SubTitle.TLabel").pack(anchor="w", pady=(2, 0))
 
-        # Explicit Alignment Matrix: Top-Right Exit Button
+        # Top-Right Anchor Alignment Matrix: Exit Button
         btn_exit = ttk.Button(header_frame, text="EXIT SYSTEM", style="Exit.TButton", command=self._on_safe_close)
         btn_exit.grid(row=0, column=1, sticky="ne", padx=(10, 0), pady=2)
 
-        # Main Workspace Grid
+        # Dynamic Grid Parent Workspace Frame Configuration (Crucial for Fluid Real-time Resizing)
         workspace = ttk.Frame(master_content_container, style="TFrame")
         workspace.pack(fill="both", expand=True)
-        workspace.columnconfigure(0, weight=4)  
-        workspace.columnconfigure(1, weight=4)  
-        workspace.columnconfigure(2, weight=4)  
-        workspace.rowconfigure(0, weight=1)
+        
+        # Distribute proportional columns weights evenly (3 columns, equal expansion distribution metrics)
+        workspace.columnconfigure(0, weight=1)  
+        workspace.columnconfigure(1, weight=1)  
+        workspace.columnconfigure(2, weight=1)  
+        workspace.rowconfigure(0, weight=1)     # Expand dynamically vertical height rows bounds
 
+        # Allocate children grid targets with global adaptive directional stickiness coordinates
         sidebar_panel = ttk.Frame(workspace, style="Card.TFrame", padding=15)
-        sidebar_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        sidebar_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 5), pady=5)
         self._render_cas_sidebar_ui(sidebar_panel)
 
         left_panel = ttk.Frame(workspace, style="Card.TFrame", padding=0)
-        left_panel.grid(row=0, column=1, sticky="nsew", padx=(0, 10))
+        left_panel.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
         self._render_scrolling_control_ui(left_panel)
 
         right_panel = ttk.Frame(workspace, style="Card.TFrame", padding=15)
-        right_panel.grid(row=0, column=2, sticky="nsew")
+        right_panel.grid(row=0, column=2, sticky="nsew", padx=(5, 0), pady=5)
         self._render_telemetry_ui(right_panel)
 
     def _render_cas_sidebar_ui(self, parent):
@@ -512,9 +520,9 @@ class ModernWeighCellSimulator(tk.Tk):
         self.cas_tree.pack(side="left", fill="both", expand=True)
         
         self.cas_tree.heading("#0", text="CAS Nested Parameter Tree Structure", anchor="w")
-        self.cas_tree.column("#0", minwidth=460, width=590, stretch=True)
+        self.cas_tree.column("#0", minwidth=450, width=580, stretch=True)
 
-        # --- LEVEL 1 CORE CATEGORIES ---
+        # --- LEVEL 1 CORE PARAMETERS MENUS ---
         l1_setup = self.cas_tree.insert("", "end", text="1. Active Setup Menu", open=True)
         l1_print = self.cas_tree.insert("", "end", text="2. Active Print Menu", open=True)
         l1_device = self.cas_tree.insert("", "end", text="3. Active Device Menu")
@@ -523,7 +531,7 @@ class ModernWeighCellSimulator(tk.Tk):
         self.cas_tree.insert(l1_device, "end", text="Peripheral Bus Hardware Mapping [BLOCKED]")
         self.cas_tree.insert(l1_app, "end", text="User Calculation Registers [BLOCKED]")
 
-        # --- LEVEL 2 SUB-MENUS ---
+        # --- LEVEL 2 SECTIONS MENUS ---
         l2_balance = self.cas_tree.insert(l1_setup, "end", text="1.1 Balance Settings", open=True)
         l2_general = self.cas_tree.insert(l1_setup, "end", text="1.9 General Settings", open=True)
         
@@ -531,7 +539,7 @@ class ModernWeighCellSimulator(tk.Tk):
         l2_print_param = self.cas_tree.insert(l1_print, "end", text="2.2 Print Parameters", open=True)
         l2_pc_direct = self.cas_tree.insert(l1_print, "end", text="2.3 PC Direct Parameters", open=True)
 
-        # --- LEVEL 3 BRANCHES (1.1 BALANCE SETTINGS) ---
+        # --- LEVEL 3 SUB-BRANCHES ---
         l3_ambient = self.cas_tree.insert(l2_balance, "end", text="1.1.1 Installation Site / Ambient Conditions")
         l3_filter = self.cas_tree.insert(l2_balance, "end", text="1.1.2 Application Filter")
         l3_stability = self.cas_tree.insert(l2_balance, "end", text="1.1.3 Stability Range")
@@ -548,7 +556,7 @@ class ModernWeighCellSimulator(tk.Tk):
         l3_output_rate = self.cas_tree.insert(l2_balance, "end", text="1.1.14 Transducer Output Data Rate")
         l3_isocal = self.cas_tree.insert(l2_balance, "end", text="1.1.15 Automated IsoCal Reminders")
 
-        # --- LEVEL 4 LEAF NODES (1.1 BALANCE CONFIGURATIONS) ---
+        # --- LEVEL 4 TARGET RESOLUTIONS ---
         self.cas_tree.insert(l3_ambient, "end", text="1.1.1.1 Very stable conditions", values=("1.1.1", "1.1.1.1"))
         self.cas_tree.insert(l3_ambient, "end", text="1.1.1.2 Stable conditions [Factory O]", values=("1.1.1", "1.1.1.2"))
         self.cas_tree.insert(l3_ambient, "end", text="1.1.1.3 Unstable conditions", values=("1.1.1", "1.1.1.3"))
@@ -622,13 +630,13 @@ class ModernWeighCellSimulator(tk.Tk):
         self.cas_tree.insert(l3_isocal, "end", text="1.1.15.1 Off [Factory O]", values=("1.1.15", "1.1.15.1"))
         self.cas_tree.insert(l3_isocal, "end", text="1.1.15.2 Note alerts active", values=("1.1.15", "1.1.15.2"))
 
-        # --- LEVEL 3 BRANCHES (2.1 PRINT COMMUNICATION PARAMETERS) ---
+        # --- LEVEL 3 BRANCHES (2.1 PRINT COMMUNICATION) ---
         l3_p_data = self.cas_tree.insert(l2_print_comm, "end", text="2.1.1 Data Output Trigger Mode")
         l3_p_can = self.cas_tree.insert(l2_print_comm, "end", text="2.1.2 Cancel Automatic Output Condition")
         l3_p_cyc = self.cas_tree.insert(l2_print_comm, "end", text="2.1.3 Cycle Automatic Output Threshold")
         l3_p_fmt = self.cas_tree.insert(l2_print_comm, "end", text="2.1.4 Text Data Stream Output Format")
 
-        # --- LEVEL 4 LEAF NODES (2.1 PRINT COMMUNICATION OPTIONS MAPPED FROM 25.PDF) ---
+        # --- LEVEL 4 LEAF NODES (2.1 PRINTING SETS MAPPED FROM 25.PDF) ---
         self.cas_tree.insert(l3_p_data, "end", text="3.1.1.1 Individual value without stability [Factory O]", values=("3.1.1", "3.1.1.1"))
         self.cas_tree.insert(l3_p_data, "end", text="3.1.1.2 Individual value after stability", values=("3.1.1", "3.1.1.2"))
         self.cas_tree.insert(l3_p_data, "end", text="3.1.1.4 Automatic, without stability", values=("3.1.1", "3.1.1.4"))
@@ -643,47 +651,44 @@ class ModernWeighCellSimulator(tk.Tk):
         self.cas_tree.insert(l3_p_fmt, "end", text="3.1.4.1 16 characters raw SBI format data block [Factory O]", values=("3.1.4", "3.1.4.1"))
         self.cas_tree.insert(l3_p_fmt, "end", text="3.1.4.2 22 characters with identification", values=("3.1.4", "3.1.4.2"))
 
-        # --- LEVEL 3 BRANCHES (2.2 PRINT LAYOUT PARAMETERS) ---
+        # --- LEVEL 3 BRANCHES (2.2 PRINT PARAMETERS) ---
         l3_p_trig = self.cas_tree.insert(l2_print_param, "end", text="2.2.1 Print Key / Action Command Trigger")
         l3_p_lfmt = self.cas_tree.insert(l2_print_param, "end", text="2.2.2 Printout Report Layout Format")
         l3_p_app = self.cas_tree.insert(l2_print_param, "end", text="2.2.3 Printout Application Parameters")
         l3_p_glp = self.cas_tree.insert(l2_print_param, "end", text="2.2.4 Printout GLP Quality Compliance Protocol")
 
-        # --- LEVEL 4 LEAF NODES (2.2 PRINT PARAMETERS OPTIONS MAPPED FROM 25.PDF + USER REQUESTS) ---
+        # --- LEVEL 4 LEAF NODES (2.2 REPORTING PROFILES DATA) ---
         self.cas_tree.insert(l3_p_trig, "end", text="3.2.1.1 Manual trigger, execute without stability", values=("3.2.1", "3.2.1.1"))
         self.cas_tree.insert(l3_p_trig, "end", text="3.2.1.2 Manual trigger, require stability lock [Factory O]", values=("3.2.1", "3.2.1.2"))
         self.cas_tree.insert(l3_p_trig, "end", text="3.2.1.6 Automatic stream output after load change delta", values=("3.2.1", "3.2.1.6"))
 
         self.cas_tree.insert(l3_p_lfmt, "end", text="3.2.2.2 Application metrics with text identification [Factory O]", values=("3.2.2", "3.2.2.2"))
 
-        # 3.2.3 Print Application Parameters Setup
         self.cas_tree.insert(l3_p_app, "end", text="3.2.3.1 Off", values=("3.2.3", "3.2.3.1"))
         self.cas_tree.insert(l3_p_app, "end", text="3.2.3.2 All parameters [Factory O]", values=("3.2.3", "3.2.3.2"))
         self.cas_tree.insert(l3_p_app, "end", text="3.2.3.3 Only main parameters", values=("3.2.3", "3.2.3.3"))
 
-        # 3.2.4 Printout GLP Protocol Setup
         self.cas_tree.insert(l3_p_glp, "end", text="3.2.4.1 Off [Factory O]", values=("3.2.4", "3.2.4.1"))
         self.cas_tree.insert(l3_p_glp, "end", text="3.2.4.2 Only after cal./adjustment", values=("3.2.4", "3.2.4.2"))
         self.cas_tree.insert(l3_p_glp, "end", text="3.2.4.3 Always on, with every manual print", values=("3.2.4", "3.2.4.3"))
 
-        # --- LEVEL 3 BRANCHES (2.3 PC DIRECT PARAMETERS SUBSECTION) ---
+        # --- LEVEL 3 BRANCHES (2.3 PC DIRECT PARAMETERS) ---
         l3_pc_sep = self.cas_tree.insert(l2_pc_direct, "end", text="2.3.1 Decimal Radix Character Separator")
         l3_pc_out = self.cas_tree.insert(l2_pc_direct, "end", text="2.3.2 Active Data Bus Output Format")
 
-        # --- LEVEL 4 LEAF NODES (2.3 PC DIRECT CONFIGURATION PROTOCOLS) ---
+        # --- LEVEL 4 LEAF NODES (2.3 PC DIRECT CORES) ---
         self.cas_tree.insert(l3_pc_sep, "end", text="3.3.1.1 Point (.) Separator [Factory O]", values=("3.3.1", "3.3.1.1"))
         self.cas_tree.insert(l3_pc_sep, "end", text="3.3.1.2 Comma (,) Separator", values=("3.3.1", "3.3.1.2"))
 
         self.cas_tree.insert(l3_pc_out, "end", text="3.3.2.1 Text and numerical value [Factory O]", values=("3.3.2", "3.3.2.1"))
         self.cas_tree.insert(l3_pc_out, "end", text="3.3.2.2 Numerical value only", values=("3.3.2", "3.3.2.2"))
 
-        # --- LEVEL 3 BRANCHES (1.9 GENERAL SETTINGS PROTOCOLS) ---
+        # --- LEVEL 3 BRANCHES (1.9 GENERAL) ---
         l3_menu_reset = self.cas_tree.insert(l2_general, "end", text="1.9.1 Registry Factory Reset Protocols")
         self.cas_tree.insert(l3_menu_reset, "end", text="1.9.1.1 Yes, wipe registers and map factory defaults", values=("1.9.1", "1.9.1.1"))
         self.cas_tree.insert(l3_menu_reset, "end", text="1.9.1.2 No, preserve active working configs [Factory O]", values=("1.9.1", "1.9.1.2"))
 
-        self.cas_tree.tree_scroll_y = v_scroll  # Cache references natively to keep window structure neat
-        self.cas_tree.tree_scroll_x = h_scroll
+        self.cas_tree.bind("<<TreeviewSelect>>", self._on_cas_menu_node_click)
 
     def _render_scrolling_control_ui(self, parent_frame):
         """Generates a comprehensive scrolling sub-canvas encapsulating all central hardware stations."""
@@ -697,13 +702,14 @@ class ModernWeighCellSimulator(tk.Tk):
             lambda e: control_canvas.configure(scrollregion=control_canvas.bbox("all"))
         )
         
+        # Keep width constrained inside container but allow internal content heights to slide seamlessly
         control_canvas.create_window((0, 0), window=scrollable_content, anchor="nw", width=380)
         control_canvas.configure(yscrollcommand=scrollbar.set)
         
         scrollbar.pack(side="right", fill="y")
         control_canvas.pack(side="left", fill="both", expand=True)
 
-        # Inner Panel Control Grids Setup
+        # Rendering hardware operations panels sequentially inside scroll canvas
         ttk.Label(scrollable_content, text="SYSTEM INITIALIZATION", style="CardTitle.TLabel").pack(anchor="w", pady=(0, 5))
         power_row = ttk.Frame(scrollable_content, style="TFrame")
         power_row.pack(fill="x", pady=(0, 15))
@@ -759,6 +765,7 @@ class ModernWeighCellSimulator(tk.Tk):
     def _render_telemetry_ui(self, parent):
         ttk.Label(parent, text="METROLOGICAL TELEMETRY MONITOR HUD", style="CardTitle.TLabel").pack(anchor="w")
 
+        # --- METROLOGICAL indicator LCD PANEL MAPPING ---
         display_housing = tk.Frame(parent, bg="#334155", padx=8, pady=8, relief="sunken", borderwidth=3)
         display_housing.pack(fill="x", pady=(10, 10))
         
@@ -791,6 +798,7 @@ class ModernWeighCellSimulator(tk.Tk):
         ttk.Label(matrix_box, textvariable=self.tare_text, style="Metric.TLabel", background="#0F172A").pack(anchor="w", pady=2)
         ttk.Label(matrix_box, textvariable=self.command_status_text, style="Metric.TLabel", background="#0F172A", foreground="#4ADE80").pack(anchor="w", pady=2)
 
+        # Scrolled Terminal Window Core
         ttk.Label(parent, text="UNIVERSAL REMOTE TRANSCIEVER SERIAL BUS MONITOR", style="CardTitle.TLabel").pack(anchor="w", pady=(6, 4))
         
         terminal_container = tk.Frame(parent, bg="#0F172A", highlightbackground="#334155", highlightthickness=1)
@@ -830,7 +838,7 @@ class ModernWeighCellSimulator(tk.Tk):
         else:
             source_weight = self.simulated_load
 
-        # Ambient Site Variance Profiles Decoder (1.1.1)
+        # Ambient Site Filter Limits (1.1.1)
         if self.active_env_filter == "1.1.1.1": noise_bound = 0.0018
         elif self.active_env_filter == "1.1.1.3": noise_bound = 0.0540
         elif self.active_env_filter == "1.1.1.4": noise_bound = 0.1450
@@ -845,7 +853,7 @@ class ModernWeighCellSimulator(tk.Tk):
         self.noise_seed = (self.noise_seed + 0.5) % 500.0
         raw_signal_output = source_weight + environmental_noise + vibration_drift
         
-        # Window Depth Averaging filter (1.1.2)
+        # Moving Average Array Depth (1.1.2)
         if self.active_app_filter == "1.1.2.1": filter_window_size = 20
         elif self.active_app_filter == "1.1.2.2": filter_window_size = 8
         elif self.active_app_filter == "1.1.2.3": filter_window_size = 4
@@ -888,7 +896,6 @@ class ModernWeighCellSimulator(tk.Tk):
             
             unit_label = " kg" if self.active_weight_unit == "1.1.7.3" else " g"
             
-            # Formatter checks matching active accuracy indices (1.1.8)
             if self.active_accuracy_digits == "1.1.8.7": display_string_output = f"{transformed_net_weight:,.3f}"
             elif self.active_accuracy_digits == "1.1.8.3": display_string_output = f"{transformed_net_weight:,.3f}"
             elif self.active_accuracy_digits == "1.1.8.4": display_string_output = f"{transformed_net_weight:,.2f}"
@@ -896,14 +903,12 @@ class ModernWeighCellSimulator(tk.Tk):
             elif self.active_accuracy_digits == "1.1.8.14": display_string_output = f"{transformed_net_weight:,.5f}"
             else: display_string_output = f"{transformed_net_weight:,.4f}"
                 
-            # --- CAS BEHAVIORAL MAP: 2.3 PC Direct Parameter Logic Conversions ---
-            # 2.3.2 Output Format Condition: Check if text identifier labels should be suppressed
+            # --- CAS BEHAVIOR MAP: PC Direct Parameter Logics (2.3) ---
             if self.pc_output_format == "3.3.2.2":
                 final_display_frame = f"{display_string_output}{stability_flag}"
             else:
                 final_display_frame = f"{display_string_output}{unit_label}{stability_flag}"
 
-            # 2.3.1 Decimal Separator Check: Swap base dots for standard commas if 3.3.1.2 is active
             if self.pc_decimal_separator == "3.3.1.2":
                 final_display_frame = final_display_frame.replace(".", ",")
 
