@@ -4,3 +4,4 @@
 
 * Added Active Print Menu
 * Added Active Appl. Menu
+* Added Android Like CAS Suite approach
