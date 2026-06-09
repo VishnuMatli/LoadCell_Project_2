@@ -24,8 +24,8 @@ class ModernWeighCellSimulator(tk.Tk):
         self.self_test_active = False
         self.adjustment_state = "idle"
         
-        # --- CAS CONFIGURATION PARAMETER TRACKING REGISTERS ---
-        # 1.1 Balance Parameters Baseline Settings
+        # --- COMPLETE CAS CONFIGURATION PARAMETER TRACKING REGISTERS ---
+        # 1.1 Setup Parameters
         self.active_env_filter = "1.1.1.2"        
         self.active_app_filter = "1.1.2.1"        
         self.active_stability_range = "1.1.3.4"   
@@ -45,7 +45,7 @@ class ModernWeighCellSimulator(tk.Tk):
         # 1.9 General Settings Parameters
         self.active_menu_reset = "1.9.1.2"        
 
-        # 3.1 - 3.3 Active Print Menu Parameter Registers (25.pdf)
+        # 3.1 - 3.4 Active Print Menu Parameters (25.pdf)
         self.print_data_output = "3.1.1.1"        
         self.print_cancel_auto = "3.1.2.1"        
         self.print_cycle_auto = "3.1.3.1"         
@@ -57,28 +57,28 @@ class ModernWeighCellSimulator(tk.Tk):
         self.pc_decimal_separator = "3.3.1.1"     
         self.pc_output_format = "3.3.2.1"         
 
-        # 2.1 - 2.9 Active Device Menu Parameter Registers (26-28.pdf)
+        # 2.1 - 2.9 Active Device Menu Parameters (26-28.pdf)
         self.dev_i1_protocol = "2.1.1.1"          
-        self.dev_i1_baud = "9600"              
-        self.dev_i1_parity = "Odd"            
-        self.dev_i1_stop_bits = "1"         
-        self.dev_i1_handshake = "Hardware Handshake"         
-        self.dev_i1_data_bits = "7"         
+        self.dev_i1_baud = "2.1.2.7"              
+        self.dev_i1_parity = "2.1.3.3"            
+        self.dev_i1_stop_bits = "2.1.4.1"         
+        self.dev_i1_handshake = "2.1.5.2"         
+        self.dev_i1_data_bits = "2.1.6.1"         
 
         self.dev_i2_protocol = "2.2.1.1"          
-        self.dev_i2_baud = "9600"              
-        self.dev_i2_parity = "Odd"            
-        self.dev_i2_stop_bits = "1"         
-        self.dev_i2_handshake = "Hardware Handshake"         
-        self.dev_i2_data_bits = "7"         
-        self.dev_i2_detected = "None/printer/virt com./PC host/input device"        
+        self.dev_i2_baud = "2.2.2.7"              
+        self.dev_i2_parity = "2.2.3.3"            
+        self.dev_i2_stop_bits = "2.2.4.1"         
+        self.dev_i2_handshake = "2.2.5.2"         
+        self.dev_i2_data_bits = "2.2.6.1"         
+        self.dev_i2_detected = "2.2.7.0"        
 
         self.dev_add_menu = "2.9.1.2"              
         self.dev_add_keypad = "2.9.3.1"            
         self.dev_add_startup = "2.9.6.4"           
         self.dev_add_backlight = "2.9.8.2"         
 
-        # 4.1 - 4.9 Active Application Menu Parameter Registers
+        # 4.1 - 4.9 Active Application Menu Parameters
         self.active_app_mode = "4.1"
         self.app_unit_toggle = "g"
         self.app_counting_res = "Normal"
@@ -91,7 +91,7 @@ class ModernWeighCellSimulator(tk.Tk):
         self.app_calc_decimals = "3"
         self.app_density_decimals = "4"
 
-        # Complete Weight Unit Multiplier Map (From 1.1.7.2 to 1.1.7.23)
+        # Complete Weight Unit Multiplier Map (1.1.7.2 to 1.1.7.23)
         self.unit_map = {
             "1.1.7.2":  {"name": "g",      "factor": 1.0},
             "1.1.7.3":  {"name": "kg",     "factor": 0.001},
@@ -117,13 +117,12 @@ class ModernWeighCellSimulator(tk.Tk):
             "1.1.7.23": {"name": "user",   "factor": 1.0}
         }
 
-        # Digital Signal Processing Buffers
+        # History and Communication Buffers
         self.filter_history_buffer = []
         self.is_currently_stable = True
         self.previous_weights_history = [0.0] * 5
         self.simulation_tick_rate_ms = 50         
         
-        # Physical Transducer Stream File Buffers
         self.file_stream_buffer = []
         self.file_stream_index = 0
         self.is_file_stream_active = False
@@ -142,15 +141,13 @@ class ModernWeighCellSimulator(tk.Tk):
         self.command_status_text = tk.StringVar(value="REMOTE BUS CONTROL: STANDBY")
         self.stream_status_text = tk.StringVar(value="INPUT TRACK: BALANCED SLIDER")
 
-        # Setup Layout Configuration Theme
+        # Setup Visual Theme Style Elements
         self._apply_theme_styles()
         self._build_hardware_layout()
         
-        # Bind explicit treeview selection hook configuration mapping parameters
-        self.cas_tree.bind("<<TreeviewSelect>>", self._on_cas_menu_node_click)
         self.protocol("WM_DELETE_WINDOW", self._on_safe_close)
 
-        # High-Fidelity Asynchronous Execution Loops
+        # High-Fidelity Execution Loops
         self._scheduled_engine_loop_id = self.after(self.simulation_tick_rate_ms, self._simulation_engine_tick)
         self.after(350, self._status_blinker_tick)
 
@@ -193,9 +190,14 @@ class ModernWeighCellSimulator(tk.Tk):
 
         style.configure("TEntry", fieldbackground="#0F172A", foreground=text_primary, bordercolor=border_color, padding=6, font=("Consolas", 10))
 
-        style.configure("Treeview", background="#1E293B", fieldbackground="#1E293B", foreground=text_primary, borderwidth=0, font=("Segoe UI", 9), rowheight=24)
-        style.configure("Treeview.Heading", background="#334155", foreground=text_primary, font=("Segoe UI", 9, "bold"), padding=5)
-        style.map("Treeview", background=[("selected", "#334155")], foreground=[("selected", "#38BDF8")])
+        # Specialized Android-Style UI Navigation components styles
+        style.configure("AndroidHeader.TLabel", background="#1E293B", foreground="#38BDF8", font=("Segoe UI", 12, "bold"))
+        style.configure("AndroidBtn.TButton", font=("Segoe UI", 10, "bold"), padding=10, background="#334155", foreground="#F8FAFC", anchor="w")
+        style.map("AndroidBtn.TButton", background=[("active", "#475569")])
+        style.configure("AndroidBack.TButton", font=("Segoe UI", 9, "bold"), padding=6, background="#475569", foreground="#38BDF8")
+
+        style.configure("TRadiobutton", background="#1E293B", foreground="#F8FAFC", font=("Segoe UI", 10))
+        style.map("TRadiobutton", background=[("active", "#1E293B")], foreground=[("active", "#38BDF8")])
 
     def _write_terminal_log(self, text):
         self.message.configure(state="normal")
@@ -204,439 +206,7 @@ class ModernWeighCellSimulator(tk.Tk):
         self.message.configure(state="disabled")
 
     def _set_command_status(self, text):
-        self.command_status_text.set(f"BUS REMOTE TELEMETRY STATUS: {text.upper()}")
-
-    def _on_cas_menu_node_click(self, event):
-        selected_node = self.cas_tree.selection()
-        if not selected_node:
-            return
-            
-        node_data = self.cas_tree.item(selected_node[0])
-        node_values = node_data.get("values", "")
-        
-        if node_values:
-            param_group, target_code = node_values[0], str(node_values[1])
-            
-            # --- ROUTING FOR LEVEL 1.1 BALANCE SETTINGS ---
-            if param_group == "1.1.1":
-                self.active_env_filter = target_code
-                self._write_terminal_log(f"[CAS BALANCE] Ambient filter updated -> {target_code}")
-            elif param_group == "1.1.2":
-                self.active_app_filter = target_code
-                self.filter_history_buffer.clear()
-                self._write_terminal_log(f"[CAS BALANCE] Application filter modified -> {target_code}")
-            elif param_group == "1.1.3":
-                self.active_stability_range = target_code
-                self._write_terminal_log(f"[CAS BALANCE] Stability range width updated -> {target_code}")
-            elif param_group == "1.1.4":
-                self.active_stability_delay = target_code
-                self._write_terminal_log(f"[CAS BALANCE] Stability latch delay adjusted -> {target_code}")
-            elif param_group == "1.1.5":
-                self.active_taring_mode = target_code
-                self._write_terminal_log(f"[CAS BALANCE] Taring behavior tracking method assigned -> {target_code}")
-            elif param_group == "1.1.6":
-                self.active_autozero = target_code
-                self._write_terminal_log(f"[CAS BALANCE] Drift correction auto-zero state toggled -> {target_code}")
-            elif param_group == "1.1.7":
-                self.active_weight_unit = target_code
-                self._write_terminal_log(f"[CAS BALANCE] Core base conversion metric weight unit -> {target_code}")
-            elif param_group == "1.1.8":
-                self.active_accuracy_digits = target_code
-                self._write_terminal_log(f"[CAS BALANCE] Display rounding index resolution pattern -> {target_code}")
-            elif param_group == "1.1.9":
-                self.active_cal_func = target_code
-                self._write_terminal_log(f"[CAS BALANCE] Calibration path profile assigned -> {target_code}")
-            elif param_group == "1.1.10":
-                self.active_adjust_process = target_code
-                self._write_terminal_log(f"[CAS BALANCE] Pre-adjustment routine workflow structure -> {target_code}")
-            elif param_group == "1.1.11":
-                self.active_zero_range = target_code
-                self._write_terminal_log(f"[CAS BALANCE] Manual zero tracking alignment bounds -> {target_code}")
-            elif param_group == "1.1.12":
-                self.active_poweron_zero = target_code
-                self._write_terminal_log(f"[CAS BALANCE] Power-on offset zero threshold assigned -> {target_code}")
-            elif param_group == "1.1.13":
-                self.active_poweron_tarezero = target_code
-                self._write_terminal_log(f"[CAS BALANCE] Clear power-on tracking offset buffer assigned -> {target_code}")
-            elif param_group == "1.1.14":
-                self.active_output_rate = target_code
-                self._reconfigure_asynchronous_clock_intervals(target_code)
-            elif param_group == "1.1.15":
-                self.active_isocal = target_code
-                self._write_terminal_log(f"[CAS BALANCE] Internal IsoCal reminder state parameter modified -> {target_code}")
-
-            # --- ACTIVE PRINT MENU (3.1 - 3.3) --- [cite: 3]
-            elif param_group == "3.1.1":
-                self.print_data_output = target_code
-                self._write_terminal_log(f"[PRINT] Data output sync assigned -> {target_code}")
-            elif param_group == "3.1.2":
-                self.print_cancel_auto = target_code
-                self._write_terminal_log(f"[PRINT] Cancel automatic transmission criterion -> {target_code}")
-            elif param_group == "3.1.3":
-                self.print_cycle_auto = target_code
-                self._write_terminal_log(f"[PRINT] Automatic printing skip cycle factor assigned -> {target_code}")
-            elif param_group == "3.1.4":
-                self.print_output_format = target_code
-                self._write_terminal_log(f"[PRINT] Data string frame layout character width -> {target_code}")
-            elif param_group == "3.2.1":
-                self.print_trigger_type = target_code
-                self._write_terminal_log(f"[PRINT] Manual layout print key sync mode assigned -> {target_code}")
-            elif param_group == "3.2.2":
-                self.print_layout_format = target_code
-                self._write_terminal_log(f"[PRINT] Format reporting identity mapped -> {target_code}")
-            elif param_group == "3.2.3":
-                self.print_appl_param = target_code
-                self._write_terminal_log(f"[PRINT] App parameters field output status toggled -> {target_code}")
-            elif param_group == "3.2.4":
-                self.print_glp_protocol = target_code
-                self._write_terminal_log(f"[PRINT] GLP compliance system validation report log -> {target_code}")
-            elif param_group == "3.3.1":
-                self.pc_decimal_separator = target_code
-                self._write_terminal_log(f"[PC-DIRECT] Radix decimal point separator assigned -> {target_code}")
-            elif param_group == "3.3.2":
-                self.pc_output_format = target_code
-                self._write_terminal_log(f"[PC-DIRECT] Character encoding data layout pattern -> {target_code}")
-
-            # --- ACTIVE DEVICE MENU (2.1 - 2.9) --- [cite: 10, 14, 20]
-            elif param_group == "2.1.1":
-                self.dev_i1_protocol = "xBPI" if target_code == "2.1.1.2" else "SBI"
-                self._write_terminal_log(f"[RS232] Protocol assigned -> {self.dev_i1_protocol}")
-            elif param_group == "2.1.2":
-                baud_map = {"3":"600", "4":"1200", "5":"2400", "6":"4800", "7":"9600", "8":"19200", "9":"38400", "10":"576000", "11":"115200"}
-                self.dev_i1_baud = baud_map.get(target_code.split(".")[-1], "9600")
-                self._write_terminal_log(f"[RS232] Clock baud speed assigned -> {self.dev_i1_baud} bps")
-            elif param_group == "2.1.3":
-                p_map = {"3":"Odd", "4":"Even", "5":"No parity"}
-                self.dev_i1_parity = p_map.get(target_code.split(".")[-1], "Odd")
-                self._write_terminal_log(f"[RS232] Parity checking bit architecture configured -> {self.dev_i1_parity}")
-            elif param_group == "2.1.4":
-                self.dev_i1_stop_bits = "1" if target_code.split(".")[-1] == "1" else "2"
-                self._write_terminal_log(f"[RS232] Transmit frame stop blocks assigned -> {self.dev_i1_stop_bits}")
-            elif param_group == "2.1.5":
-                h_map = {"1":"Software Handshake", "2":"Hardware Handshake", "3":"No handshake"}
-                self.dev_i1_handshake = h_map.get(target_code.split(".")[-1], "Hardware Handshake")
-                self._write_terminal_log(f"[RS232] Workflow pipeline handshake protocol assigned -> {self.dev_i1_handshake}")
-            elif param_group == "2.1.6":
-                self.dev_i1_data_bits = "7" if target_code.split(".")[-1] == "1" else "8"
-                self._write_terminal_log(f"[RS232] Word size content data bit length assigned -> {self.dev_i1_data_bits}")
-
-            # Interface 2 (USB) [cite: 14]
-            elif param_group == "2.2.1":
-                self.dev_i2_protocol = "xBPI" if target_code == "2.2.1.2" else "SBI"
-                self._write_terminal_log(f"[USB] Protocol state profile mapped -> {self.dev_i2_protocol}")
-            elif param_group == "2.2.2":
-                baud_map = {"3":"600", "4":"1200", "5":"2400", "6":"4800", "7":"9600", "8":"19200", "9":"38400", "10":"576000", "11":"115200"}
-                self.dev_i2_baud = baud_map.get(target_code.split(".")[-1], "9600")
-                self._write_terminal_log(f"[USB] Clock speed baud rate assigned -> {self.dev_i2_baud} bps")
-            elif param_group == "2.2.3":
-                p_map = {"3":"Odd", "4":"Even", "5":"No parity"}
-                self.dev_i2_parity = p_map.get(target_code.split(".")[-1], "Odd")
-                self._write_terminal_log(f"[USB] Frame check parity layout architecture toggled -> {self.dev_i2_parity}")
-            elif param_group == "2.2.4":
-                self.dev_i2_stop_bits = "1" if target_code.split(".")[-1] == "1" else "2"
-                self._write_terminal_log(f"[USB] Structural frame synchronization stop blocks -> {self.dev_i2_stop_bits}")
-            elif param_group == "2.2.5":
-                self.dev_i2_handshake = "Hardware Handshake" if target_code.split(".")[-1] == "2" else "No handshake"
-                self._write_terminal_log(f"[USB] Flow control handshake protocol changed -> {self.dev_i2_handshake}")
-            elif param_group == "2.2.6":
-                self.dev_i2_data_bits = "7" if target_code.split(".")[-1] == "1" else "8"
-                self._write_terminal_log(f"[USB] Character frame data bit word index length -> {self.dev_i2_data_bits}")
-            elif param_group == "2.2.7":
-                self.dev_i2_detected = "None/printer/virt com./PC host/input device"
-                self._write_terminal_log("[USB] Attached hardware polling status checked.")
-
-            # Additional function configuration routing [cite: 20]
-            elif param_group == "2.9.1":
-                self.dev_add_menu = target_code
-                self._write_terminal_log(f"[ADDITIONAL] Config access rule updated -> {target_code}")
-            elif param_group == "2.9.3":
-                self.dev_add_keypad = target_code
-                self._write_terminal_log(f"[ADDITIONAL] Keypad lock strategy updated -> {target_code}")
-            elif param_group == "2.9.6":
-                self.dev_add_startup = target_code
-                self._write_terminal_log(f"[ADDITIONAL] Boot initial strategy applied -> {target_code}")
-            elif param_group == "2.9.8":
-                self.dev_add_backlight = target_code
-                if target_code == "2.9.8.1":
-                    self.display_label.config(fg="#155E27", bg="#020617") 
-                    self._write_terminal_log("[ADDITIONAL] Backlight state toggled -> OFF.")
-                else:
-                    self.display_label.config(fg="#22C55E", bg="#0F172A")
-                    self._write_terminal_log("[ADDITIONAL] Backlight state toggled -> ON.")
-
-            # --- ACTIVE APPLICATION MENU (4.1 - 4.9) ---
-            elif param_group == "4.1":
-                self.active_app_mode = "4.1"
-                self.app_unit_toggle = target_code
-                self._write_terminal_log(f"[APP MODE] Weighing Only -> Assigned Unit: {target_code}")
-            elif param_group == "4.3.1":
-                self.active_app_mode = "4.3"
-                self.app_counting_res = target_code
-                self._write_terminal_log(f"[APP MODE] Counting -> Piece weight calculation resolution: {target_code}")
-            elif param_group == "4.3.2":
-                self.app_counting_ref_update = target_code
-                self._write_terminal_log(f"[APP MODE] Counting -> Reference updating strategy: {target_code}")
-            elif param_group == "4.4":
-                self.active_app_mode = "4.4"
-                self.app_percent_decimals = target_code
-                self._write_terminal_log(f"[APP MODE] Percentage -> Assigned decimal rounding places: {target_code}")
-            elif param_group == "4.5":
-                self.active_app_mode = "4.5"
-                self.app_net_total_print = target_code
-                self._write_terminal_log(f"[APP MODE] Net Total Formulation -> Printout strategy component: {target_code}")
-            elif param_group == "4.6":
-                self.active_app_mode = "4.6"
-                self.app_totalizing_print = target_code
-                self._write_terminal_log(f"[APP MODE] Totalizing Formulation -> Printout component structure: {target_code}")
-            elif param_group == "4.7.1":
-                self.active_app_mode = "4.7"
-                self.app_animal_activity = target_code
-                self._write_terminal_log(f"[APP MODE] Animal activity threshold parameter bound -> {target_code}")
-            elif param_group == "4.7.2":
-                self._write_terminal_log("[APP MODE] Animal Balance tracking integration algorithm triggered manually.")
-            elif param_group == "4.8.1":
-                self.active_app_mode = "4.8"
-                self.app_calc_method = target_code
-                self._write_terminal_log(f"[APP MODE] Mathematical calculation profile -> {target_code}")
-            elif param_group == "4.8.2":
-                self.app_calc_decimals = target_code
-                self._write_terminal_log(f"[APP MODE] Mathematical expression decimal output -> {target_code}")
-            elif param_group == "4.9":
-                self.active_app_mode = "4.9"
-                self.app_density_decimals = target_code
-                self._write_terminal_log(f"[APP MODE] Density calculation decimal truncation accuracy -> {target_code}")
-
-            # --- FACTORY RESET SUBSYSTEM TRIGGER ---
-            elif param_group == "1.9.1" and target_code == "1.9.1.1":
-                self._execute_factory_menu_reset()
-                    
-            self._set_command_status(f"REGISTRY CODE OPERATIVE: {target_code}")
-
-    def _on_slider_adjustment(self, val):
-        try:
-            self.target_load = float(val)
-        except ValueError:
-            self.target_load = 0.0
-        self.load_lbl_hint.configure(text=f"Targeted Mass: {self.target_load:,.4f} g")
-
-    def _inject_preset_load(self, target_mass):
-        self.is_file_stream_active = False
-        self.stream_status_text.set("INPUT TRACK: BALANCED SLIDER")
-        self.load_var.set(target_mass)
-        self._on_slider_adjustment(target_mass)
-        self._write_terminal_log(f"[HARDWARE] Direct load injection complete: {target_mass:,.4f} g.")
-
-    def _reconfigure_asynchronous_clock_intervals(self, code):
-        rate_mappings = {
-            "1.1.14.1": 50, "1.1.14.2": 40, "1.1.14.3": 100, "1.1.14.4": 50, "1.1.14.5": 40, "1.1.14.6": 20, "1.1.14.7": 10
-        }
-        self.simulation_tick_rate_ms = rate_mappings.get(code, 50)
-        self._write_terminal_log(f"[CLOCK] Master asynchronous pipeline update rate -> {self.simulation_tick_rate_ms}ms")
-
-    def _execute_factory_menu_reset(self):
-        self.active_env_filter = "1.1.1.2"
-        self.active_app_filter = "1.1.2.1"
-        self.active_stability_range = "1.1.3.4"
-        self.active_stability_delay = "1.1.4.2"
-        self.active_taring_mode = "1.1.5.2"
-        self.active_autozero = "1.1.6.1"
-        self.active_weight_unit = "1.1.7.2"
-        self.active_accuracy_digits = "1.1.8.1"
-        
-        self.print_data_output = "3.1.1.1"        
-        self.print_cancel_auto = "3.1.2.1"        
-        self.print_cycle_auto = "3.1.3.1"         
-        self.print_output_format = "3.1.4.1"      
-        self.print_trigger_type = "3.2.1.2"       
-        self.print_layout_format = "3.2.2.2"      
-        self.print_appl_param = "3.2.3.2"         
-        self.print_glp_protocol = "3.2.4.1"       
-        self.pc_decimal_separator = "3.3.1.1"     
-        self.pc_output_format = "3.3.2.1"         
-
-        self.dev_i1_protocol = "SBI"          
-        self.dev_i1_baud = "9600"              
-        self.dev_i1_parity = "Odd"            
-        self.dev_i1_stop_bits = "1"         
-        self.dev_i1_handshake = "Hardware Handshake"         
-        self.dev_i1_data_bits = "7"         
-
-        self.dev_i2_protocol = "SBI"          
-        self.dev_i2_baud = "9600"              
-        self.dev_i2_parity = "Odd"            
-        self.dev_i2_stop_bits = "1"         
-        self.dev_i2_handshake = "Hardware Handshake"         
-        self.dev_i2_data_bits = "7"         
-        self.dev_i2_detected = "None/printer/virt com./PC host/input device"        
-
-        self.dev_add_menu = "2.9.1.2"              
-        self.dev_add_keypad = "2.9.3.1"            
-        self.dev_add_startup = "2.9.6.4"           
-        self.dev_add_backlight = "2.9.8.2"         
-
-        self.active_app_mode = "4.1"
-
-        self.reset_entire_pipeline()
-        self.display_label.config(fg="#22C55E", bg="#0F172A")
-        self._write_terminal_log("[RESET] Subsystem registry database flushed to factory defaults.")
-        messagebox.showinfo("Factory Reset", "Sartorius system profiles initialized successfully.")
-
-    def reset_entire_pipeline(self):
-        self.zero_reference = 0.0
-        self.tare_offset = 0.0
-        self.scale_factor = 1.0
-        self.manual_scale_str.set("1.000000")
-        self.scale_text.set("Calibration Scale: 1.000000")
-        self.zero_text.set("Zero Offset: 0.0000 g")
-        self.tare_text.set("Tare Offset: 0.0000 g")
-
-    def _process_calibrated_weight(self, raw_weight):
-        net = (raw_weight - self.zero_reference) * self.scale_factor
-        return net - self.tare_offset
-
-    def _evaluate_measurement_stability(self, current_weight):
-        self.previous_weights_history.append(current_weight)
-        if len(self.previous_weights_history) > 5:
-            self.previous_weights_history.pop(0)
-        
-        stability_map = {
-            "1.1.3.1": 0.005, "1.1.3.2": 0.01, "1.1.3.3": 0.02, 
-            "1.1.3.4": 0.05, "1.1.3.5": 0.1, "1.1.3.6": 0.2
-        }
-        allowed_delta = stability_map.get(self.active_stability_range, 0.05)
-        max_deviation = max(self.previous_weights_history) - min(self.previous_weights_history)
-        self.is_currently_stable = max_deviation <= allowed_delta
-
-    def apply_manual_scaling(self):
-        if self.dev_add_keypad == "2.9.3.2":
-            messagebox.showerror("Access Blocked", "Front tactile console operations are BLOCKED (2.9.3.2).")
-            return
-        try:
-            factor = float(self.manual_scale_str.get().strip())
-        except ValueError:
-            messagebox.showerror("Validation Fault", "Invalid numerical scalar index.")
-            return
-        if factor <= 0: return
-        self.scale_factor = factor
-        self.scale_text.set(f"Calibration Scale: {self.scale_factor:.6f}")
-
-    def execute_zero_scaling(self):
-        if self.dev_add_keypad == "2.9.3.2": return
-        current_raw = self._generate_live_signal() if self.machine_running else self.simulated_load
-        max_allowed_zero = 820.0 if self.active_zero_range == "1.1.11.4" else 164.0  
-        if abs(current_raw) > max_allowed_zero:
-            messagebox.showerror("Zero Error", "Transducer offset out of bounds mapping constraints.")
-            return
-        self.zero_reference = current_raw
-        self.zero_text.set(f"Zero Offset: {self.zero_reference:,.4f} g")
-
-    def execute_tare(self):
-        if self.dev_add_keypad == "2.9.3.2": return
-        if self.active_taring_mode == "1.1.5.2" and not self.is_currently_stable:
-            self._write_terminal_log("[TARE BLOCKED] Data line stream unstable.")
-            return
-        current_raw = self._generate_live_signal() if self.machine_running else self.simulated_load
-        self.tare_offset = (current_raw - self.zero_reference) * self.scale_factor
-        self.tare_text.set(f"Tare Offset: {self.tare_offset:,.4f} g")
-
-    def execute_auto_scale(self):
-        if self.dev_add_keypad == "2.9.3.2": return
-        try:
-            reference_weight = float(self.auto_ref_str.get().strip())
-        except ValueError: return
-        if reference_weight <= 0: return
-        sample_raw = self._generate_live_signal() if self.machine_running else max(self.simulated_load, 0.001)
-        delta_span = sample_raw - self.zero_reference
-        if abs(delta_span) < 1e-5: return
-        self.scale_factor = reference_weight / delta_span
-        self.manual_scale_str.set(f"{self.scale_factor:.6f}")
-        self.scale_text.set(f"Calibration Scale: {self.scale_factor:.6f}")
-
-    def _import_sensor_log_file(self):
-        file_path = filedialog.askopenfilename(filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")])
-        if not file_path: return
-        try:
-            temp_buffer = []
-            with open(file_path, "r") as f:
-                for line in f:
-                    cleaned = line.strip()
-                    if cleaned.startswith("ADC:"):
-                        try: temp_buffer.append(float(cleaned.split(":")[1]))
-                        except: continue
-            if not temp_buffer: return
-            self.file_stream_buffer = temp_buffer
-            self.file_stream_index = 0
-            self.loaded_file_path = os.path.basename(file_path)
-            self.is_file_stream_active = True
-            self.stream_status_text.set(f"INPUT TRACK: {self.loaded_file_path}")
-            self._write_terminal_log(f"[INGESTION] Buffered {len(self.file_stream_buffer)} transducer records.")
-        except Exception as e: messagebox.showerror("I/O Error", str(e))
-
-    def _toggle_stream_source_mode(self):
-        if not self.file_stream_buffer: return
-        self.is_file_stream_active = not self.is_file_stream_active
-        self.stream_status_text.set(f"INPUT TRACK: {self.loaded_file_path}" if self.is_file_stream_active else "INPUT TRACK: BALANCED SLIDER")
-
-    def start_machine(self):
-        if self.machine_running: return
-        self.machine_running = True
-        self.status_text.set("EMULATOR BUS CORE: ONLINE")
-        self._write_terminal_log("[SYSTEM] Data telemetry processor pipeline started.")
-
-    def stop_machine(self):
-        if not self.machine_running: return
-        self.machine_running = False
-        self.blink_on = False
-        self.status_text.set("EMULATOR BUS CORE: OFFLINE")
-        self.blinker_canvas.itemconfig(self.blinker_node, fill="#64748B", outline="#334155")
-        self.display_text.set("------")
-        self._write_terminal_log("[SYSTEM] Data telemetry processor pipeline halted.")
-
-    def send_command(self):
-        raw_input = self.command_var.get().strip()
-        if not raw_input: return
-        if raw_input.upper().startswith("ESC") or not all(c in "0123456789ABCDEFabcdef " for c in raw_input):
-            self.protocol_mode = "RS232/SBI"
-            self.lbl_mode_indicator.config(text="Active Decoder: LEGACY RS232-SBI TERMINAL CORE", foreground="#EF4444")
-            tx_frame = self._process_legacy_rs232_ascii(raw_input.upper())
-            self._write_terminal_log(f"[RS232 RX] '{raw_input}' | [TX] -> {tx_frame}")
-        else:
-            self.protocol_mode = "xBPI"
-            self.lbl_mode_indicator.config(text="Active Decoder: SARTORIUS xBPI COMPILER LINK", foreground="#4ADE80")
-            try:
-                byte_array = bytes.fromhex(raw_input)
-                tx_bytes = self._process_binary_xbpi_frame(byte_array)
-                tx_hex_string = " ".join(f"{b:02X}" for b in tx_bytes)
-                self._write_terminal_log(f"[xBPI RX] {raw_input} | [TX] -> {tx_hex_string}")
-            except Exception as e:
-                self._write_terminal_log(f"[xBPI ERROR] Dropped structural frame: {str(e)}")
-
-    def _process_binary_xbpi_frame(self, data: bytes) -> bytes:
-        if len(data) < 3: 
-            return bytes([0x03, 0x41, 0x92])  
-        function_number = data[3] if len(data) > 3 else 0x00
-        response_frame = bytearray()
-        
-        if function_number == 0x1E:   
-            response_frame.extend(bytes([0x48, 0x42, 0x14, 0x8F, 0x5C, 0x28, 0x34, 0x43]))
-            self.adjustment_state = "idle"
-        elif function_number == 0x16: 
-            self.execute_tare()
-            response_frame.extend(bytes([0x00]))  
-        elif function_number == 0x18: 
-            self.execute_zero_scaling()
-            response_frame.extend(bytes([0x00]))  
-        else: 
-            response_frame.extend(bytes([0x00]))
-            
-        final_tx_packet = bytearray([len(response_frame) + 2, 0x41]) + response_frame
-        final_tx_packet.append(sum(final_tx_packet) % 256)
-        return bytes(final_tx_packet)
-
-    def _process_legacy_rs232_ascii(self, cmd: str) -> str:
-        if cmd in {"ESC T", "TARE"}: self.execute_tare(); return "TARE ACK"
-        if cmd in {"ESC V", "ZERO"}: self.execute_zero_scaling(); return "ZERO ACK"
-        return f"WT + {self.last_display_value:,.4f} g"
+        self.command_status_text.set(f"BUS STATUS: {text.upper()}")
 
     def _build_hardware_layout(self):
         master_content_container = ttk.Frame(self, style="TFrame")
@@ -650,8 +220,8 @@ class ModernWeighCellSimulator(tk.Tk):
         title_subcontainer = ttk.Frame(header_frame, style="TFrame")
         title_subcontainer.grid(row=0, column=0, sticky="nw")
         
-        ttk.Label(title_subcontainer, text="SARTORIUS CAS CONFIGURATION & WEIGH SIMULATION SUITE", style="MainTitle.TLabel").pack(anchor="w")
-        ttk.Label(title_subcontainer, text="High-precision test workspace mapping comprehensive multi-app parameters & complete metrological unit arrays.", style="SubTitle.TLabel").pack(anchor="w", pady=(2, 0))
+        ttk.Label(title_subcontainer, text="SARTORIUS CAS CONFIGURATION APP SIMULATOR", style="MainTitle.TLabel").pack(anchor="w")
+        ttk.Label(title_subcontainer, text="High-precision system workspace mapped using an Android Settings App architecture pattern.", style="SubTitle.TLabel").pack(anchor="w", pady=(2, 0))
 
         btn_exit = ttk.Button(header_frame, text="EXIT SYSTEM", style="Exit.TButton", command=self._on_safe_close)
         btn_exit.grid(row=0, column=1, sticky="ne", padx=(10, 0), pady=2)
@@ -664,9 +234,12 @@ class ModernWeighCellSimulator(tk.Tk):
         workspace.columnconfigure(2, weight=4)  
         workspace.rowconfigure(0, weight=1)     
 
-        sidebar_panel = ttk.Frame(workspace, style="Card.TFrame", padding=15)
-        sidebar_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 5), pady=5)
-        self._render_cas_sidebar_ui(sidebar_panel)
+        # Android App Surface Container Panel
+        self.sidebar_panel = ttk.Frame(workspace, style="Card.TFrame", padding=15)
+        self.sidebar_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 5), pady=5)
+        
+        # Initialize Android Base Root Page View
+        self._render_android_root_view()
 
         left_panel = ttk.Frame(workspace, style="Card.TFrame", padding=0)
         left_panel.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
@@ -676,319 +249,465 @@ class ModernWeighCellSimulator(tk.Tk):
         right_panel.grid(row=0, column=2, sticky="nsew", padx=(5, 0), pady=5)
         self._render_telemetry_ui(right_panel)
 
-    def _render_cas_sidebar_ui(self, parent):
-        ttk.Label(parent, text="DEVICE HARDWARE PARAMETER REGISTRY", style="CardTitleX.TLabel").pack(anchor="w", pady=(0, 10))
+    # --- ANDROID SETTINGS STYLE SURFACE ENGINE ---
+    def _clear_android_surface(self):
+        for child in self.sidebar_panel.winfo_children():
+            child.destroy()
+
+    def _render_android_root_view(self):
+        self._clear_android_surface()
+
+        ttk.Label(self.sidebar_panel, text="ACTIVE CAS SYSTEM SETTINGS", style="AndroidHeader.TLabel").pack(anchor="w", pady=(0, 15))
+
+        menus = [
+            ("Active Setup Menu          >", self._render_balance_menu),
+            ("Active Device Menu         >", self._render_device_interfaces_menu),
+            ("Active Print Menu          >", self._render_print_settings_menu),
+            ("Active Appl. Menu          >", self._render_application_modes_menu),
+            ("Factory Defaults Options   >", self._render_factory_reset_view)
+        ]
+
+        for text, callback in menus:
+            btn = ttk.Button(self.sidebar_panel, text=text, style="AndroidBtn.TButton", command=callback)
+            btn.pack(fill="x", pady=4)
+
+    def _add_android_back_row(self, title, back_callback):
+        nav_row = ttk.Frame(self.sidebar_panel, style="TFrame")
+        nav_row.pack(fill="x", pady=(0, 15))
         
-        tree_container = tk.Frame(parent, bg="#1E293B", highlightbackground="#334155", highlightthickness=1)
-        tree_container.pack(fill="both", expand=True)
-        
-        v_scroll = tk.Scrollbar(tree_container, orient="vertical")
-        h_scroll = tk.Scrollbar(tree_container, orient="horizontal")
-        
-        self.cas_tree = ttk.Treeview(
-            tree_container, 
-            yscrollcommand=v_scroll.set, 
-            xscrollcommand=h_scroll.set, 
-            selectmode="browse", 
-            show="tree headings"
-        )
-        
-        v_scroll.config(command=self.cas_tree.yview)
-        h_scroll.config(command=self.cas_tree.xview)
-        
-        v_scroll.pack(side="right", fill="y")
-        h_scroll.pack(side="bottom", fill="x")
-        self.cas_tree.pack(side="left", fill="both", expand=True)
-        
-        self.cas_tree.heading("#0", text="Complete Menu Hierarchy Registers Mapped", anchor="w")
-        self.cas_tree.column("#0", minwidth=420, width=480, stretch=True)
+        back_btn = ttk.Button(nav_row, text="< BACK", style="AndroidBack.TButton", command=back_callback)
+        back_btn.pack(side="left", padx=(0, 10))
 
-        # LEVEL 1 CATEGORIES
-        l1_setup = self.cas_tree.insert("", "end", text="1. Active Setup Menu", open=True)
-        l1_print = self.cas_tree.insert("", "end", text="2. Active Print Menu", open=True)
-        l1_device = self.cas_tree.insert("", "end", text="3. Active Device Menu", open=True)
-        l1_apps = self.cas_tree.insert("", "end", text="4. Active Application Menu", open=True)
+        ttk.Label(nav_row, text=title, style="AndroidHeader.TLabel").pack(side="left", fill="x")
+        ttk.Separator(self.sidebar_panel, orient="horizontal").pack(fill="x", pady=(0, 10))
 
-        # 1.1 Balance Settings [cite: 10]
-        l2_balance = self.cas_tree.insert(l1_setup, "end", text="1.1 Balance Settings", open=True)
-        l2_general = self.cas_tree.insert(l1_setup, "end", text="1.9 General Settings", open=True)
-        
-        l3_ambient = self.cas_tree.insert(l2_balance, "end", text="1.1.1 Installation Site / Ambient Conditions")
-        self.cas_tree.insert(l3_ambient, "end", text="1.1.1.1 Very stable conditions", values=("1.1.1", "1.1.1.1"))
-        self.cas_tree.insert(l3_ambient, "end", text="1.1.1.2 Stable conditions [Factory O]", values=("1.1.1", "1.1.1.2"))
-        self.cas_tree.insert(l3_ambient, "end", text="1.1.1.3 Unstable conditions", values=("1.1.1", "1.1.1.3"))
-        self.cas_tree.insert(l3_ambient, "end", text="1.1.1.4 Very unstable conditions", values=("1.1.1", "1.1.1.4"))
+    # --- SUB-MENUS RESTORING COMPREHENSIVE SUBOPTIONS ---
+    def _render_balance_menu(self):
+        self._clear_android_surface()
+        self._add_android_back_row("Active Setup Menu", self._render_android_root_view)
 
-        l3_filter = self.cas_tree.insert(l2_balance, "end", text="1.1.2 Application Filter")
-        self.cas_tree.insert(l3_filter, "end", text="1.1.2.1 Final readout [Factory O]", values=("1.1.2", "1.1.2.1"))
-        self.cas_tree.insert(l3_filter, "end", text="1.1.2.2 Dosing mode", values=("1.1.2", "1.1.2.2"))
-        self.cas_tree.insert(l3_filter, "end", text="1.1.2.3 Reduced filter matrix", values=("1.1.2", "1.1.2.3"))
-        self.cas_tree.insert(l3_filter, "end", text="1.1.2.4 Filter pipeline off", values=("1.1.2", "1.1.2.4"))
+        sub_menus = [
+            ("1.1.1 Installation Site / Ambient Conditions", lambda: self._render_radio_selector_page("Ambient Conditions", "1.1.1", [
+                ("1.1.1.1 Very stable conditions", "1.1.1.1"),
+                ("1.1.1.2 Stable conditions [Factory Default]", "1.1.1.2"),
+                ("1.1.1.3 Unstable conditions", "1.1.1.3"),
+                ("1.1.1.4 Very unstable conditions", "1.1.1.4")
+            ], "active_env_filter", self._render_balance_menu)),
+            
+            ("1.1.2 Application Filter Processing", lambda: self._render_radio_selector_page("Application Filter", "1.1.2", [
+                ("1.1.2.1 Final readout trace filter [Factory]", "1.1.2.1"),
+                ("1.1.2.2 Dosing configuration mode", "1.1.2.2"),
+                ("1.1.2.3 Reduced filter matrix path", "1.1.2.3"),
+                ("1.1.2.4 Filter pipeline switched off", "1.1.2.4")
+            ], "active_app_filter", self._render_balance_menu, clear_dsp=True)),
 
-        l3_stability = self.cas_tree.insert(l2_balance, "end", text="1.1.3 Stability Range")
-        for idx, step in enumerate(["1/4 Scale Interval", "1/2 Scale Interval", "1 Scale Interval", "2 Scale Interval [Factory O]", "4 Scale Interval", "8 Scale Interval"], 1):
-            self.cas_tree.insert(l3_stability, "end", text=f"1.1.3.{idx} {step}", values=("1.1.3", f"1.1.3.{idx}"))
+            ("1.1.3 Measurement Stability Range Bounds", lambda: self._render_radio_selector_page("Stability Range", "1.1.3", [
+                ("1.1.3.1 1/4 Scale delta confirmation step", "1.1.3.1"),
+                ("1.1.3.2 1/2 Scale delta confirmation step", "1.1.3.2"),
+                ("1.1.3.3 1 Scale delta confirmation interval", "1.1.3.3"),
+                ("1.1.3.4 2 Scale confirmation step [Factory]", "1.1.3.4"),
+                ("1.1.3.5 4 Scale confirmation tracking step", "1.1.3.5"),
+                ("1.1.3.6 8 Scale confirmation parsing step", "1.1.3.6")
+            ], "active_stability_range", self._render_balance_menu)),
 
-        l3_delay = self.cas_tree.insert(l2_balance, "end", text="1.1.4 Stability Delay")
-        for idx, step in enumerate(["Very Short", "Short [Factory O]", "Moderate", "Long"], 1):
-            self.cas_tree.insert(l3_delay, "end", text=f"1.1.4.{idx} {step}", values=("1.1.4", f"1.1.4.{idx}"))
+            ("1.1.4 Measurement Stability Delay", lambda: self._render_radio_selector_page("Stability Delay", "1.1.4", [
+                ("1.1.4.1 Very Short latency parsing step", "1.1.4.1"),
+                ("1.1.4.2 Short latency latching window [O]", "1.1.4.2"),
+                ("1.1.4.3 Moderate tracking delay cycle", "1.1.4.3"),
+                ("1.1.4.4 Long tracking delay timeline window", "1.1.4.4")
+            ], "active_stability_delay", self._render_balance_menu)),
 
-        l3_taring = self.cas_tree.insert(l2_balance, "end", text="1.1.5 Taring Mode")
-        self.cas_tree.insert(l3_taring, "end", text="1.1.5.1 Without stability", values=("1.1.5", "1.1.5.1"))
-        self.cas_tree.insert(l3_taring, "end", text="1.1.5.2 After stability [Factory O]", values=("1.1.5", "1.1.5.2"))
+            ("1.1.5 Taring Structural Operations Mode", lambda: self._render_radio_selector_page("Taring Mode", "1.1.5", [
+                ("1.1.5.1 Execute without verification stability", "1.1.5.1"),
+                ("1.1.5.2 Execute after stability locked [O]", "1.1.5.2")
+            ], "active_taring_mode", self._render_balance_menu)),
 
-        l3_autoz = self.cas_tree.insert(l2_balance, "end", text="1.1.6 Autozero Tracking")
-        self.cas_tree.insert(l3_autoz, "end", text="1.1.6.1 ON [Factory O]", values=("1.1.6", "1.1.6.1"))
-        self.cas_tree.insert(l3_autoz, "end", text="1.1.6.2 OFF", values=("1.1.6", "1.1.6.2"))
+            ("1.1.6 Auto-Zero Origin Drift Tracking", lambda: self._render_radio_selector_page("Autozero Status", "1.1.6", [
+                ("1.1.6.1 Automatic origin adjustments ON [O]", "1.1.6.1"),
+                ("1.1.6.2 Automatic origin tracking OFF", "1.1.6.2")
+            ], "active_autozero", self._render_balance_menu)),
 
-        # 1.1.7 FULL RESTORATION AND RANGE MAPPING (1.1.7.3 to 1.1.7.23)
-        l3_unit = self.cas_tree.insert(l2_balance, "end", text="1.1.7 Weight Unit Selection")
-        self.cas_tree.insert(l3_unit, "end", text="1.1.7.1 Available unit list profile", values=("1.1.7", "1.1.7.1"))
-        self.cas_tree.insert(l3_unit, "end", text="1.1.7.2 g, Gram [Factory O]", values=("1.1.7", "1.1.7.2"))
-        for code_suffix, details in self.unit_map.items():
-            if code_suffix == "1.1.7.2": continue
-            self.cas_tree.insert(l3_unit, "end", text=f"{code_suffix} Unit mapped: {details['name']}", values=("1.1.7", code_suffix))
+            ("1.1.7 Instrumentation Multi-Unit Mapping", lambda: self._render_radio_selector_page("Weight Conversion Unit", "1.1.7", [
+                (f"{k} Active mapping logic: {v['name']}" + (" [Factory]" if k == "1.1.7.2" else ""), k) for k, v in self.unit_map.items()
+            ], "active_weight_unit", self._render_balance_menu)),
 
-        l3_accuracy = self.cas_tree.insert(l2_balance, "end", text="1.1.8 Accuracy Configuration")
-        self.cas_tree.insert(l3_accuracy, "end", text="1.1.8.1 All digits on [Factory O]", values=("1.1.8", "1.1.8.1"))
-        self.cas_tree.insert(l3_accuracy, "end", text="1.1.8.2 Last digit on/off during transformation", values=("1.1.8", "1.1.8.2"))
-        self.cas_tree.insert(l3_accuracy, "end", text="1.1.8.3 Scale interval index +1", values=("1.1.8", "1.1.8.3"))
-        self.cas_tree.insert(l3_accuracy, "end", text="1.1.8.4 Scale interval index +2", values=("1.1.8", "1.1.8.4"))
-        self.cas_tree.insert(l3_accuracy, "end", text="1.1.8.5 Scale interval index +3", values=("1.1.8", "1.1.8.5"))
-        self.cas_tree.insert(l3_accuracy, "end", text="1.1.8.6 Last digit scale interval 1", values=("1.1.8", "1.1.8.6"))
-        self.cas_tree.insert(l3_accuracy, "end", text="1.1.8.7 Last digit off", values=("1.1.8", "1.1.8.7"))
-        self.cas_tree.insert(l3_accuracy, "end", text="1.1.8.14 10x high validation magnification", values=("1.1.8", "1.1.8.14"))
+            ("1.1.8 Display Rounding Index Precision", lambda: self._render_radio_selector_page("Display Accuracy", "1.1.8", [
+                ("1.1.8.1 All standard data digits on [O]", "1.1.8.1"),
+                ("1.1.8.2 Toggle last rounding digit active", "1.1.8.2"),
+                ("1.1.8.3 Scale accuracy step magnified +1", "1.1.8.3"),
+                ("1.1.8.4 Scale accuracy step magnified +2", "1.1.8.4"),
+                ("1.1.8.5 Scale accuracy step magnified +3", "1.1.8.5"),
+                ("1.1.8.6 Force last digit scale interval 1", "1.1.8.6"),
+                ("1.1.8.7 Truncate last output string digit", "1.1.8.7"),
+                ("1.1.8.14 Magnify layout reading by 10x", "1.1.8.14")
+            ], "active_accuracy_digits", self._render_balance_menu)),
 
-        l3_cal = self.cas_tree.insert(l2_balance, "end", text="1.1.9 Calibration & Adjustment Function")
-        self.cas_tree.insert(l3_cal, "end", text="1.1.9.1 Ext Adjustment Default Weight [Factory O]", values=("1.1.9", "1.1.9.1"))
-        self.cas_tree.insert(l3_cal, "end", text="1.1.9.3 Ext Adjustment User Defined Weight", values=("1.1.9", "1.1.9.3"))
-        self.cas_tree.insert(l3_cal, "end", text="1.1.9.4 Internal Adjustment", values=("1.1.9", "1.1.9.4"))
-        self.cas_tree.insert(l3_cal, "end", text="1.1.9.6 Ext Linearization Default Weight Setup", values=("1.1.9", "1.1.9.6"))
-        self.cas_tree.insert(l3_cal, "end", text="1.1.9.7 Ext Linearization User Assigned Weight", values=("1.1.9", "1.1.9.7"))
-        self.cas_tree.insert(l3_cal, "end", text="1.1.9.8 Set Preload Value", values=("1.1.9", "1.1.9.8"))
-        self.cas_tree.insert(l3_cal, "end", text="1.1.9.9 Delete Preload Value", values=("1.1.9", "1.1.9.9"))
-        self.cas_tree.insert(l3_cal, "end", text="1.1.9.10 Calibration Key/Command Blocked", values=("1.1.9", "1.1.9.10"))
-        self.cas_tree.insert(l3_cal, "end", text="2.1.9.12 Selection List Path", values=("1.1.9", "2.1.9.12"))
-        self.cas_tree.insert(l3_cal, "end", text="3.1.9.18 Define Internal Weight Value Registers", values=("1.1.9", "3.1.9.18"))
+            ("1.1.9 Calibration & Adjustment Functions", lambda: self._render_radio_selector_page("Calibration Function", "1.1.9", [
+                ("1.1.9.1 Ext Adjustment Default Weight [Factory]", "1.1.9.1"),
+                ("1.1.9.3 Ext Adjustment User Defined Weight", "1.1.9.3"),
+                ("1.1.9.4 Internal Adjustment Profile Loop", "1.1.9.4"),
+                ("1.1.9.6 Ext Linearization Default Weight Setup", "1.1.9.6"),
+                ("1.1.9.7 Ext Linearization User Assigned Weight", "1.1.9.7"),
+                ("1.1.9.8 Set Preload Value Register Mappings", "1.1.9.8"),
+                ("1.1.9.9 Delete Preload Value Register Buffer", "1.1.9.9"),
+                ("1.1.9.10 Calibration Key/Command Blocked Security", "1.1.9.10"),
+                ("2.1.9.12 Selection List Path Parameters", "2.1.9.12"),
+                ("3.1.9.18 Define Internal Weight Register Values", "3.1.9.18")
+            ], "active_cal_func", self._render_balance_menu)),
 
-        l3_process = self.cas_tree.insert(l2_balance, "end", text="1.1.10 Adjustment Process Pipeline")
-        self.cas_tree.insert(l3_process, "end", text="1.1.10.1 Adjust immediately [Factory O]", values=("1.1.10", "1.1.10.1"))
-        self.cas_tree.insert(l3_process, "end", text="1.1.10.2 Calibration before adjustment routine", values=("1.1.10", "1.1.10.2"))
+            ("1.1.10 Pre-Calibration Process Pipeline", lambda: self._render_radio_selector_page("Adjustment Process", "1.1.10", [
+                ("1.1.10.1 Adjust immediately structural sequence", "1.1.10.1"),
+                ("1.1.10.2 Calibration before adjustment routines", "1.1.10.2")
+            ], "active_adjust_process", self._render_balance_menu)),
 
-        l3_z_range = self.cas_tree.insert(l2_balance, "end", text="1.1.11 Zero Range")
-        self.cas_tree.insert(l3_z_range, "end", text="1.1.11.2 2% Maximum Load [Factory O]", values=("1.1.11", "1.1.11.2"))
-        self.cas_tree.insert(l3_z_range, "end", text="1.1.11.4 10% Maximum Load", values=("1.1.11", "1.1.11.4"))
+            ("1.1.11 Manual Zero Point Boundary Ranges", lambda: self._render_radio_selector_page("Zero Range Limits", "1.1.11", [
+                ("1.1.11.2 2% of Max Load tracking threshold", "1.1.11.2"),
+                ("1.1.11.4 10% of Max Load tracking threshold", "1.1.11.4")
+            ], "active_zero_range", self._render_balance_menu)),
 
-        l3_pwr_z = self.cas_tree.insert(l2_balance, "end", text="1.1.12 Zero At Power On")
-        self.cas_tree.insert(l3_pwr_z, "end", text="1.1.12.4 10% Max Load [Factory O]", values=("1.1.12", "1.1.12.4"))
-        self.cas_tree.insert(l3_pwr_z, "end", text="1.1.12.7 100% Max Load Tracking Range", values=("1.1.12", "1.1.12.7"))
+            ("1.1.12 Origin Target Load Zero at Power On", lambda: self._render_radio_selector_page("Power On Zero Range", "1.1.12", [
+                ("1.1.12.4 10% Max Load tolerance [Factory]", "1.1.12.4"),
+                ("1.1.12.7 100% Max Load wide calibration tracking", "1.1.12.7")
+            ], "active_poweron_zero", self._render_balance_menu)),
 
-        l3_tare_pwr = self.cas_tree.insert(l2_balance, "end", text="1.1.13 Tare / Zero At Power On")
-        self.cas_tree.insert(l3_tare_pwr, "end", text="1.1.13.1 ON [Factory O]", values=("1.1.13", "1.1.13.1"))
-        self.cas_tree.insert(l3_tare_pwr, "end", text="1.1.13.2 OFF", values=("1.1.13", "1.1.13.2"))
+            ("1.1.13 Clear Buffer Registers at Power On", lambda: self._render_radio_selector_page("Tare/Zero At Power On", "1.1.13", [
+                ("1.1.13.1 Active data pipeline cleaning ON", "1.1.13.1"),
+                ("1.1.13.2 Active data pipeline cleaning OFF", "1.1.13.2")
+            ], "active_poweron_tarezero", self._render_balance_menu)),
 
-        l3_rate = self.cas_tree.insert(l2_balance, "end", text="1.1.14 Output Rate Speed")
-        for idx, step in enumerate(["Normal [Factory O]", "Fast", "Slow 10Hz", "Moderate 20Hz", "Quick 25Hz", "Very Quick 50Hz", "Maximum 100Hz"], 1):
-            self.cas_tree.insert(l3_rate, "end", text=f"1.1.14.{idx} {step}", values=("1.1.14", f"1.1.14.{idx}"))
+            ("1.1.14 Transducer Data Update Clock Rate", lambda: self._render_radio_selector_page("Data Clock Output Rate", "1.1.14", [
+                ("1.1.14.1 Standard tracking updating rate", "1.1.14.1"),
+                ("1.1.14.2 High performance processing rate", "1.1.14.2"),
+                ("1.1.14.3 Slow automation sample clock 10Hz", "1.1.14.3"),
+                ("1.1.14.4 Moderate automation clock 20Hz", "1.1.14.4"),
+                ("1.1.14.5 Quick automation sample loop 25Hz", "1.1.14.5"),
+                ("1.1.14.6 Fast processing sample loop 50Hz", "1.1.14.6"),
+                ("1.1.14.7 Performance execution loop 100Hz", "1.1.14.7")
+            ], "active_output_rate", self._render_balance_menu, clear_dsp=True)),
 
-        l3_isocal = self.cas_tree.insert(l2_balance, "end", text="1.1.15 Auto Calibration / ISOCAL")
-        self.cas_tree.insert(l3_isocal, "end", text="1.1.15.1 OFF [Factory O]", values=("1.1.15", "1.1.15.1"))
-        self.cas_tree.insert(l3_isocal, "end", text="1.1.15.2 Note Alerts Enabled", values=("1.1.15", "1.1.15.2"))
+            ("1.1.15 IsoCal Automatic Internal Reminders", lambda: self._render_radio_selector_page("ISOCAL System Notes", "1.1.15", [
+                ("1.1.15.1 Disable automatic isocal warnings", "1.1.15.1"),
+                ("1.1.15.2 Enable automatic isocal message notes", "1.1.15.2")
+            ], "active_isocal", self._render_balance_menu))
+        ]
 
-        # 1.9 General settings
-        self.cas_tree.insert(l2_general, "end", text="1.9.1.1 Load Factory Settings Profiles", values=("1.9.1", "1.9.1.1"))
-        self.cas_tree.insert(l2_general, "end", text="1.9.1.2 Standby Operational [Factory O]", values=("1.9.1", "1.9.1.2"))
+        for text, callback in sub_menus:
+            btn = ttk.Button(self.sidebar_panel, text=text, style="AndroidBtn.TButton", command=callback)
+            btn.pack(fill="x", pady=3)
 
-        # --- 2. ACTIVE PRINT MENU HIERARCHY (3.1 - 3.3) --- [cite: 3]
-        l2_print_comm = self.cas_tree.insert(l1_print, "end", text="3.1 Communication Parameters", open=True)
-        l2_print_param = self.cas_tree.insert(l1_print, "end", text="3.2 Print Parameters", open=True)
-        l2_pc_direct = self.cas_tree.insert(l1_print, "end", text="3.3 PC Direct Parameters", open=True)
+    def _render_device_interfaces_menu(self):
+        self._clear_android_surface()
+        self._add_android_back_row("Active Device Menu", self._render_android_root_view)
 
-        l3_p_data = self.cas_tree.insert(l2_print_comm, "end", text="Data Output Sync Trigger")
-        self.cas_tree.insert(l3_p_data, "end", text="3.1.1.1 Individual value without stability [Factory O]", values=("3.1.1", "3.1.1.1"))
-        self.cas_tree.insert(l3_p_data, "end", text="3.1.1.2 Individual value after stability Lock", values=("3.1.1", "3.1.1.2"))
-        self.cas_tree.insert(l3_p_data, "end", text="3.1.1.4 Automatic, without stability stream", values=("3.1.1", "3.1.1.4"))
-        self.cas_tree.insert(l3_p_data, "end", text="3.1.1.5 Automatic, after stability window", values=("3.1.1", "3.1.1.5"))
+        sub_menus = [
+            ("2.1 Interface 1 (RS232 Serial Port Control)   >", self._render_rs232_submenu),
+            ("2.2 Interface 2 (USB Virtual COM Control)    >", self._render_usb_submenu),
+            ("2.9 Additional System Core Function Setup     >", self._render_additional_submenu)
+        ]
 
-        l3_p_can = self.cas_tree.insert(l2_print_comm, "end", text="Cancel Auto Output")
-        self.cas_tree.insert(l3_p_can, "end", text="3.1.2.1 Cancel not possible [Factory O]", values=("3.1.2", "3.1.2.1"))
-        self.cas_tree.insert(l3_p_can, "end", text="3.1.2.2 Cancel via print command intercept", values=("3.1.2", "3.1.2.2"))
+        for text, callback in sub_menus:
+            btn = ttk.Button(self.sidebar_panel, text=text, style="AndroidBtn.TButton", command=callback)
+            btn.pack(fill="x", pady=4)
 
-        l3_p_cyc = self.cas_tree.insert(l2_print_comm, "end", text="Cycle Automatic Output")
-        self.cas_tree.insert(l3_p_cyc, "end", text="3.1.3.1 Every value raw block transmission [Factory O]", values=("3.1.3", "3.1.3.1"))
-        self.cas_tree.insert(l3_p_cyc, "end", text="3.1.3.2 Every 2nd value structural suppression", values=("3.1.3", "3.1.3.2"))
+    def _render_rs232_submenu(self):
+        self._clear_android_surface()
+        self._add_android_back_row("RS232 Parameters", self._render_device_interfaces_menu)
 
-        l3_p_fmt = self.cas_tree.insert(l2_print_comm, "end", text="Output Format String Block Size")
-        self.cas_tree.insert(l3_p_fmt, "end", text="3.1.4.1 16 characters raw metrics output data", values=("3.1.4", "3.1.4.1"))
-        self.cas_tree.insert(l3_p_fmt, "end", text="3.1.4.2 22 characters text identifier frame", values=("3.1.4", "3.1.4.2"))
+        sub_menus = [
+            ("2.1.1 Data Exchange Stream Protocol", lambda: self._render_radio_selector_page("RS232 Protocol", "2.1.1", [
+                ("2.1.1.1 Standard ASCII SBI Mode [Factory]", "2.1.1.1"),
+                ("2.1.1.2 Sartorius High Performance xBPI Core", "2.1.1.2"),
+                ("2.1.1.4 Auxiliary SBI 2nd layout display panel", "2.1.1.4"),
+                ("2.1.1.7 Universal formatting matrix printer (YDP20)", "2.1.1.7"),
+                ("2.1.1.8 Lab reporting automation printer module (YDP30)", "2.1.1.8")
+            ], "dev_i1_protocol", self._render_rs232_submenu)),
+            
+            ("2.1.2 Interface Clock Baud Speed", lambda: self._render_radio_selector_page("RS232 Baud Speed", "2.1.2", [
+                (f"2.1.2.{i} Configuration value: {b} bps", f"2.1.2.{i}") for i, b in [("3","600"),("4","1200"),("5","2400"),("6","4800"),("7","9600 [O]"),("8","19200"),("9","38400"),("10","576000"),("11","115200")]
+            ], "dev_i1_baud", self._render_rs232_submenu)),
 
-        l3_prt_trig = self.cas_tree.insert(l2_print_param, "end", text="Printout Sync Trigger Path")
-        self.cas_tree.insert(l3_prt_trig, "end", text="3.2.1.1 Manual, without stability threshold", values=("3.2.1", "3.2.1.1"))
-        self.cas_tree.insert(l3_prt_trig, "end", text="3.2.1.2 Manual, after stability confirmation [O]", values=("3.2.1", "3.2.1.2"))
-        self.cas_tree.insert(l3_prt_trig, "end", text="3.2.1.6 Automatic, after load change variance", values=("3.2.1", "3.2.1.6"))
+            ("2.1.3 Structural Hardware Parity Checking", lambda: self._render_radio_selector_page("RS232 Parity Mask", "2.1.3", [
+                ("2.1.3.3 Odd operational alignment [Factory]", "2.1.3.3"),
+                ("2.1.3.4 Even operational alignment frame block", "2.1.3.4"),
+                ("2.1.3.5 No parity tracking data bits allocated", "2.1.3.5")
+            ], "dev_i1_parity", self._render_rs232_submenu)),
 
-        l3_prt_lfmt = self.cas_tree.insert(l2_print_param, "end", text="Printout Format Structure")
-        self.cas_tree.insert(l3_prt_lfmt, "end", text="3.2.2.2 Application, with identification strings", values=("3.2.2", "3.2.2.2"))
+            ("2.1.4 Hardware End Stop Characters", lambda: self._render_radio_selector_page("RS232 Stop Bits", "2.1.4", [
+                ("2.1.4.1 Mapped individual 1 stop bit character", "2.1.4.1"),
+                ("2.1.4.2 Mapped secondary 2 stop bits character", "2.1.4.2")
+            ], "dev_i1_stop_bits", self._render_rs232_submenu)),
 
-        l3_prt_app = self.cas_tree.insert(l2_print_param, "end", text="Printout Appl. Parameters")
-        self.cas_tree.insert(l3_prt_app, "end", text="3.2.3.1 Off parameter visibility state", values=("3.2.3", "3.2.3.1"))
-        self.cas_tree.insert(l3_prt_app, "end", text="3.2.3.2 All parameters fully written visible", values=("3.2.3", "3.2.3.2"))
-        self.cas_tree.insert(l3_prt_app, "end", text="3.2.3.3 Only main parameters critical visible", values=("3.2.3", "3.2.3.3"))
+            ("2.1.5 Interfaced Synchronization Flow Handshake", lambda: self._render_radio_selector_page("RS232 Flow Control", "2.1.5", [
+                ("2.1.5.1 XON/XOFF text software handshake loop", "2.1.5.1"),
+                ("2.1.5.2 CTS/RTS hardware serial handshake lines", "2.1.5.2"),
+                ("2.1.5.3 No active workflow synchronization handshake", "2.1.5.3")
+            ], "dev_i1_handshake", self._render_rs232_submenu)),
 
-        l3_prt_glp = self.cas_tree.insert(l2_print_param, "end", text="Printout GLP QA Protocol")
-        self.cas_tree.insert(l3_prt_glp, "end", text="3.2.4.1 Off profile baseline [Factory O]", values=("3.2.4", "3.2.4.1"))
-        self.cas_tree.insert(l3_prt_glp, "end", text="3.2.4.2 Only after verification cal./adjustment", values=("3.2.4", "3.2.4.2"))
-        self.cas_tree.insert(l3_prt_glp, "end", text="3.2.4.3 Always on, appended with manual trigger", values=("3.2.4", "3.2.4.3"))
+            ("2.1.6 Word Character Byte Word Size", lambda: self._render_radio_selector_page("RS232 Data Bits", "2.1.6", [
+                ("2.1.6.1 7 block bit size characters configuration", "2.1.6.1"),
+                ("2.1.6.2 8 block bit size characters configuration", "2.1.6.2")
+            ], "dev_i1_data_bits", self._render_rs232_submenu))
+        ]
+        for text, callback in sub_menus:
+            btn = ttk.Button(self.sidebar_panel, text=text, style="AndroidBtn.TButton", command=callback)
+            btn.pack(fill="x", pady=3)
 
-        l3_pc_sep = self.cas_tree.insert(l2_pc_direct, "end", text="Decimal Separator")
-        self.cas_tree.insert(l3_pc_sep, "end", text="3.3.1.1 Point separator notation rule [Factory O]", values=("3.3.1", "3.3.1.1"))
-        self.cas_tree.insert(l3_pc_sep, "end", text="3.3.1.2 Comma separator alignment rule", values=("3.3.1", "3.3.1.2"))
+    def _render_usb_submenu(self):
+        self._clear_android_surface()
+        self._add_android_back_row("USB Parameters", self._render_device_interfaces_menu)
 
-        l3_pc_out = self.cas_tree.insert(l2_pc_direct, "end", text="Output Format Mode")
-        self.cas_tree.insert(l3_pc_out, "end", text="3.3.2.1 Text and numerical value data string [O]", values=("3.3.2", "3.3.2.1"))
-        self.cas_tree.insert(l3_pc_out, "end", text="3.3.2.2 Numerical value metric only array size", values=("3.3.2", "3.3.2.2"))
+        sub_menus = [
+            ("2.2.1 Virtual Protocol Mode Layer", lambda: self._render_radio_selector_page("USB Protocol", "2.2.1", [
+                ("2.2.1.1 Standard text stream ASCII SBI Mode", "2.2.1.1"),
+                ("2.2.1.2 Native high speed binary xBPI Matrix", "2.2.1.2"),
+                ("2.2.1.4 Secondary display auxiliary sync port", "2.2.1.4"),
+                ("2.2.1.6 Spreadsheet direct matrix parsed output", "2.2.1.6"),
+                ("2.2.1.7 Universal printing module tracking (YDP20)", "2.2.1.7"),
+                ("2.2.1.8 Lab printer layout reporting sync (YDP30)", "2.2.1.8"),
+                ("2.2.1.9 Text editor raw block direct injection", "2.2.1.9"),
+                ("2.2.1.10 Off entire communication layer channel", "2.2.1.10")
+            ], "dev_i2_protocol", self._render_usb_submenu)),
 
-        # --- 3. ACTIVE DEVICE MENU HIERARCHY (2.1 - 2.9) --- [cite: 10, 14, 20]
-        l2_dev_i1 = self.cas_tree.insert(l1_device, "end", text="2.1 Interface 1 (RS232)", open=True)
-        l2_dev_i2 = self.cas_tree.insert(l1_device, "end", text="2.2 Interface 2 (USB)", open=True)
-        l2_dev_add = self.cas_tree.insert(l1_device, "end", text="2.9 Additional Function", open=True)
+            ("2.2.2 Port Virtual Baud Sync speed", lambda: self._render_radio_selector_page("USB Baud Speed", "2.2.2", [
+                (f"2.2.2.{i} Configuration value: {b} bps", f"2.2.2.{i}") for i, b in [("3","600"),("4","1200"),("5","2400"),("6","4800"),("7","9600"),("8","19200"),("9","38400"),("10","576000"),("11","115200")]
+            ], "dev_i2_baud", self._render_usb_submenu)),
 
-        l3_i1_proto = self.cas_tree.insert(l2_dev_i1, "end", text="Data Protocol Profile")
-        self.cas_tree.insert(l3_i1_proto, "end", text="2.1.1.1 SBI Core Mode [Factory O]", values=("2.1.1", "2.1.1.1"))
-        self.cas_tree.insert(l3_i1_proto, "end", text="2.1.1.2 xBPI High Performance Link", values=("2.1.1", "2.1.1.2"))
-        self.cas_tree.insert(l3_i1_proto, "end", text="2.1.1.4 SBI 2nd external display panel sync", values=("2.1.1", "2.1.1.4"))
-        self.cas_tree.insert(l3_i1_proto, "end", text="2.1.1.7 Universal printer framework (YDP20)", values=("2.1.1", "2.1.1.7"))
-        self.cas_tree.insert(l3_i1_proto, "end", text="2.1.1.8 Lab automation printer module (YDP30)", values=("2.1.1", "2.1.1.8"))
+            ("2.2.3 Virtual Frame Verification Parity", lambda: self._render_radio_selector_page("USB Parity Mask", "2.2.3", [
+                ("2.2.3.3 Odd framework check parity layer", "2.2.3.3"),
+                ("2.2.3.4 Even framework validation check layer", "2.2.3.4"),
+                ("2.2.3.5 No parity character validation bits", "2.2.3.5")
+            ], "dev_i2_parity", self._render_usb_submenu)),
 
-        l3_i1_baud = self.cas_tree.insert(l2_dev_i1, "end", text="Baud Rate Interface Speed")
-        for idx, baud in [("3","600"), ("4","1200"), ("5","2400"), ("6","4800"), ("7","9600 [O]"), ("8","19200"), ("9","38400"), ("10","576000"), ("11","115200")]:
-            self.cas_tree.insert(l3_i1_baud, "end", text=f"2.1.2.{idx} {baud} bps", values=("2.1.2", f"2.1.2.{idx}"))
+            ("2.2.4 Stop Framing Structures Alignment", lambda: self._render_radio_selector_page("USB Stop Bits", "2.2.4", [
+                ("2.2.4.1 Individual 1 stop tracking bit frame", "2.2.4.1"),
+                ("2.2.4.2 Secondary 2 stop tracking bits frame", "2.2.4.2")
+            ], "dev_i2_stop_bits", self._render_usb_submenu)),
 
-        l3_i1_par = self.cas_tree.insert(l2_dev_i1, "end", text="Parity Framework Mask")
-        self.cas_tree.insert(l3_i1_par, "end", text="2.1.3.3 Odd structural verification [O]", values=("2.1.3", "2.1.3.3"))
-        self.cas_tree.insert(l3_i1_par, "end", text="2.1.3.4 Even structural validation check", values=("2.1.3", "2.1.3.4"))
-        self.cas_tree.insert(l3_i1_par, "end", text="2.1.3.5 No parity tracking bit buffer", values=("2.1.3", "2.1.3.5"))
+            ("2.2.5 Virtual Stream Intercept Handshake", lambda: self._render_radio_selector_page("USB Flow Control", "2.2.5", [
+                ("2.2.5.2 Hardware protocol pipeline handshake", "2.2.5.2"),
+                ("2.2.5.3 No handshake validation logic checked", "2.2.5.3")
+            ], "dev_i2_handshake", self._render_usb_submenu)),
 
-        l3_i1_stop = self.cas_tree.insert(l2_dev_i1, "end", text="Stop Bits Layer Size")
-        self.cas_tree.insert(l3_i1_stop, "end", text="2.1.4.1 1 stop bit validation frame [O]", values=("2.1.4", "2.1.4.1"))
-        self.cas_tree.insert(l3_i1_stop, "end", text="2.1.4.2 2 stop bits validation sequence", values=("2.1.4", "2.1.4.2"))
+            ("2.2.6 Virtual Bus Data Byte Word Size", lambda: self._render_radio_selector_page("USB Data Bits", "2.2.6", [
+                ("2.2.6.1 7 data bits layout structure definition", "2.2.6.1"),
+                ("2.2.6.2 8 data bits layout structure definition", "2.2.6.2")
+            ], "dev_i2_data_bits", self._render_usb_submenu)),
 
-        l3_i1_hand = self.cas_tree.insert(l2_dev_i1, "end", text="Handshake Hardware Sync Mode")
-        self.cas_tree.insert(l3_i1_hand, "end", text="2.1.5.1 Software Handshake protocol stream", values=("2.1.5", "2.1.5.1"))
-        self.cas_tree.insert(l3_i1_hand, "end", text="2.1.5.2 Hardware Handshake serial flow line", values=("2.1.5", "2.1.5.2"))
-        self.cas_tree.insert(l3_i1_hand, "end", text="2.1.5.3 No handshake synchronization link", values=("2.1.5", "2.1.5.3"))
+            ("2.2.7 Auto Sensing USB Attachment States", lambda: self._render_radio_selector_page("USB Peripheral Detection", "2.2.7", [
+                ("2.2.7.0 Generic host/printer default tracking link", "2.2.7.0")
+            ], "dev_i2_detected", self._render_usb_submenu))
+        ]
+        for text, callback in sub_menus:
+            btn = ttk.Button(self.sidebar_panel, text=text, style="AndroidBtn.TButton", command=callback)
+            btn.pack(fill="x", pady=3)
 
-        l3_i1_bits = self.cas_tree.insert(l2_dev_i1, "end", text="Data Bits Word Structure")
-        self.cas_tree.insert(l3_i1_bits, "end", text="2.1.6.1 7 data bits structural character [O]", values=("2.1.6", "2.1.6.1"))
-        self.cas_tree.insert(l3_i1_bits, "end", text="2.1.6.2 8 data bits structural character size", values=("2.1.6", "2.1.6.2"))
+    def _render_additional_submenu(self):
+        self._clear_android_surface()
+        self._add_android_back_row("Additional Functions", self._render_device_interfaces_menu)
 
-        # Interface 2 (USB) [cite: 14]
-        l3_i2_proto = self.cas_tree.insert(l2_dev_i2, "end", text="Data Protocol Profile")
-        self.cas_tree.insert(l3_i2_proto, "end", text="2.2.1.1 SBI Stream Mode Layout", values=("2.2.1", "2.2.1.1"))
-        self.cas_tree.insert(l3_i2_proto, "end", text="2.2.1.2 xBPI High Performance Pipeline Link", values=("2.2.1", "2.2.1.2"))
-        self.cas_tree.insert(l3_i2_proto, "end", text="2.2.1.4 SBI 2nd display auxiliary channel interface", values=("2.2.1", "2.2.1.4"))
-        self.cas_tree.insert(l3_i2_proto, "end", text="2.2.1.6 PC spreadsheet format parsed matrix", values=("2.2.1", "2.2.1.6"))
-        self.cas_tree.insert(l3_i2_proto, "end", text="2.2.1.7 Universal printer layout alignment (YDP20)", values=("2.2.1", "2.2.1.7"))
-        self.cas_tree.insert(l3_i2_proto, "end", text="2.2.1.8 Lab printer layout protocol track (YDP30)", values=("2.2.1", "2.2.1.8"))
-        self.cas_tree.insert(l3_i2_proto, "end", text="2.2.1.9 PC text format baseline frame structure", values=("2.2.1", "2.2.1.9"))
-        self.cas_tree.insert(l3_i2_proto, "end", text="2.2.1.10 Off entire communication layer channel", values=("2.2.1", "2.2.1.10"))
+        sub_menus = [
+            ("2.9.1 Parameter Editing Menu Restrictions", lambda: self._render_radio_selector_page("Menu Access Edit", "2.9.1", [
+                ("2.9.1.1 Full modifications allowed to configurations", "2.9.1.1"),
+                ("2.9.1.2 Read-Only secure locking enabled [Factory]", "2.9.1.2")
+            ], "dev_add_menu", self._render_additional_submenu)),
 
-        l3_i2_baud = self.cas_tree.insert(l2_dev_i2, "end", text="Baud Rate Processing Clock")
-        for idx, baud in [("3","600"), ("4","1200"), ("5","2400"), ("6","4800"), ("7","9600"), ("8","19200"), ("9","38400"), ("10","576000"), ("11","115200")]:
-            self.cas_tree.insert(l3_i2_baud, "end", text=f"2.2.2.{idx} {baud} bps", values=("2.2.2", f"2.2.2.{idx}"))
+            ("2.9.3 Console Tactile Keypad Lockout", lambda: self._render_radio_selector_page("Keypad Locks", "2.9.3", [
+                ("2.9.3.1 Front panel interface keys available", "2.9.3.1"),
+                ("2.9.3.2 Front panel button switches BLOCKED", "2.9.3.2")
+            ], "dev_add_keypad", self._render_additional_submenu)),
 
-        l3_i2_par = self.cas_tree.insert(l2_dev_i2, "end", text="Parity Mask Settings")
-        self.cas_tree.insert(l3_i2_par, "end", text="2.2.3.3 Odd framework check layer", values=("2.2.3", "2.2.3.3"))
-        self.cas_tree.insert(l3_i2_par, "end", text="2.2.3.4 Even framework tracking logic", values=("2.2.3", "2.2.3.4"))
-        self.cas_tree.insert(l3_i2_par, "end", text="2.2.3.5 No parity tracking allocation", values=("2.2.3", "2.2.3.5"))
+            ("2.9.6 Instrumentation Boot Initialization", lambda: self._render_radio_selector_page("Startup Routine Strategy", "2.9.6", [
+                ("2.9.6.3 Enter standby state upon power connection", "2.9.6.3"),
+                ("2.9.6.4 Execute automatic on power sequence [Factory]", "2.9.6.4")
+            ], "dev_add_startup", self._render_additional_submenu)),
+            
+            ("2.9.8 Visual Display Backlight Profile", lambda: self._render_radio_selector_page("Display Backlight", "2.9.8", [
+                ("2.9.8.1 Deactivate panel illumination [OFF]", "2.9.8.1"),
+                ("2.9.8.2 Activate illumination matrix [ON]", "2.9.8.2")
+            ], "dev_add_backlight", self._render_additional_submenu, update_backlight=True))
+        ]
+        for text, callback in sub_menus:
+            btn = ttk.Button(self.sidebar_panel, text=text, style="AndroidBtn.TButton", command=callback)
+            btn.pack(fill="x", pady=3)
 
-        l3_i2_stop = self.cas_tree.insert(l2_dev_i2, "end", text="Number of Stop Bits")
-        self.cas_tree.insert(l3_i2_stop, "end", text="2.2.4.1 1 stop bit character block", values=("2.2.4", "2.2.4.1"))
-        self.cas_tree.insert(l3_i2_stop, "end", text="2.2.4.2 2 stop bits character layout", values=("2.2.4", "2.2.4.2"))
+    def _render_print_settings_menu(self):
+        self._clear_android_surface()
+        self._add_android_back_row("Active Print Menu", self._render_android_root_view)
 
-        l3_i2_hand = self.cas_tree.insert(l2_dev_i2, "end", text="Handshake Protocol")
-        self.cas_tree.insert(l3_i2_hand, "end", text="2.2.5.2 Hardware Handshake workflow route", values=("2.2.5", "2.2.5.2"))
-        self.cas_tree.insert(l3_i2_hand, "end", text="2.2.5.3 No handshake protocol execution", values=("2.2.5", "2.2.5.3"))
+        sub_menus = [
+            ("3.1.1 Automated Data Output Sync", lambda: self._render_radio_selector_page("Data Output Trigger", "3.1.1", [
+                ("3.1.1.1 Individual reading without stability", "3.1.1.1"),
+                ("3.1.1.2 Individual reading after stability latch", "3.1.1.2"),
+                ("3.1.1.4 Continuous broadcast stream un-stabilized", "3.1.1.4"),
+                ("3.1.1.5 Continuous broadcast stream after stability", "3.1.1.5")
+            ], "print_data_output", self._render_print_settings_menu)),
 
-        l3_i2_bits = self.cas_tree.insert(l2_dev_i2, "end", text="Number of Data Bits")
-        self.cas_tree.insert(l3_i2_bits, "end", text="2.2.6.1 7 data bits layout structure size", values=("2.2.6", "2.2.6.1"))
-        self.cas_tree.insert(l3_i2_bits, "end", text="2.2.6.2 8 data bits layout structure size", values=("2.2.6", "2.2.6.2"))
+            ("3.1.2 Automatic Transmission Intercept Rule", lambda: self._render_radio_selector_page("Cancel Auto Output", "3.1.2", [
+                ("3.1.2.1 Active automated print cancellation disabled", "3.1.2.1"),
+                ("3.1.2.2 Intercept and stop via print key commands", "3.1.2.2")
+            ], "print_cancel_auto", self._render_print_settings_menu)),
 
-        l3_i2_det = self.cas_tree.insert(l2_dev_i2, "end", text="Detected Peripheral Link Node")
-        self.cas_tree.insert(l3_i2_det, "end", text="2.2.7.0 None/printer/virt com./PC host/input [O]", values=("2.2.7", "2.2.7.0"))
+            ("3.1.3 Suppress Repeated Transmissions Cycle", lambda: self._render_radio_selector_page("Skip Auto Print Cycles", "3.1.3", [
+                ("3.1.3.1 Send every single raw telemetry line value", "3.1.3.1"),
+                ("3.1.3.2 Filter and skip every alternate value line", "3.1.3.2")
+            ], "print_cycle_auto", self._render_print_settings_menu)),
 
-        # 2.9 Additional Function parameters [cite: 20]
-        l3_add_menu = self.cas_tree.insert(l2_dev_add, "end", text="Menu Access Operations Matrix")
-        self.cas_tree.insert(l3_add_menu, "end", text="2.9.1.1 Menu can be edited parameters actively", values=("2.9.1", "2.9.1.1"))
-        self.cas_tree.insert(l3_add_menu, "end", text="2.9.1.2 Menu read only security block status [O]", values=("2.9.1", "2.9.1.2"))
+            ("3.1.4 Serial Stream Block Data Width size", lambda: self._render_radio_selector_page("Output Text Data Width", "3.1.4", [
+                ("3.1.4.1 16 characters raw metrics short string block", "3.1.4.1"),
+                ("3.1.4.2 22 characters explicit expanded index identification", "3.1.4.2")
+            ], "print_output_format", self._render_print_settings_menu)),
 
-        l3_add_key = self.cas_tree.insert(l2_dev_add, "end", text="Keypad State Isolation Controls")
-        self.cas_tree.insert(l3_add_key, "end", text="2.9.3.1 Keys available console interface active [O]", values=("2.9.3", "2.9.3.1"))
-        self.cas_tree.insert(l3_add_key, "end", text="2.9.3.2 Keys blocked tracking firmware isolation", values=("2.9.3", "2.9.3.2"))
+            ("3.2.1 Manual Console Printing Synch Type", lambda: self._render_radio_selector_page("Print Key Behavior", "3.2.1", [
+                ("3.2.1.1 Print instantly regardless of weight stability", "3.2.1.1"),
+                ("3.2.1.2 Latch weight stability before print execution", "3.2.1.2"),
+                ("3.2.1.6 Print automatically when load delta variance shifts", "3.2.1.6")
+            ], "print_trigger_type", self._render_print_settings_menu)),
 
-        l3_add_boot = self.cas_tree.insert(l2_dev_add, "end", text="Start-up Behavior Protocol Strategy")
-        self.cas_tree.insert(l3_add_boot, "end", text="2.9.6.3 On/standby (without time loop sequence)", values=("2.9.6", "2.9.6.3"))
-        self.cas_tree.insert(l3_add_boot, "end", text="2.9.6.4 Automatic on initialization calibration loop [O]", values=("2.9.6", "2.9.6.4"))
+            ("3.2.2 Formatted Document Layout Rule Mapping", lambda: self._render_radio_selector_page("Print layout Identification", "3.2.2", [
+                ("3.2.2.2 Mapped structured application document standard", "3.2.2.2")
+            ], "print_layout_format", self._render_print_settings_menu)),
 
-        l3_add_lit = self.cas_tree.insert(l2_dev_add, "end", text="Display Backlight Luminosity Panel")
-        self.cas_tree.insert(l3_add_lit, "end", text="2.9.8.1 Off complete illumination array matrix", values=("2.9.8", "2.9.8.1"))
-        self.cas_tree.insert(l3_add_lit, "end", text="2.9.8.2 On complete illumination high intensity active [O]", values=("2.9.8", "2.9.8.2"))
+            ("3.2.3 Output Metadata Parameters Field Block", lambda: self._render_radio_selector_page("Visible Application Fields", "3.2.3", [
+                ("3.2.3.1 Hide metadata parameter strings from sheets", "3.2.3.1"),
+                ("3.2.3.2 Write complete explicit configuration values list", "3.2.3.2"),
+                ("3.2.3.3 Restrict block to main critical identifiers", "3.2.3.3")
+            ], "print_appl_param", self._render_print_settings_menu)),
 
-        # --- 4. ACTIVE APPLICATION MENU HIERARCHY (4.1 - 4.9) ---
-        l2_app_weigh = self.cas_tree.insert(l1_apps, "end", text="4.1 Weighing Only Mode Branches", open=True)
-        l2_app_count = self.cas_tree.insert(l1_apps, "end", text="4.3 Counting Application Profile")
-        l2_app_pct = self.cas_tree.insert(l1_apps, "end", text="4.4 Percentage Tracking Mode Profile")
-        l2_app_net = self.cas_tree.insert(l1_apps, "end", text="4.5 Net Total Component Recipe Profile")
-        l2_app_tot = self.cas_tree.insert(l1_apps, "end", text="4.6 Totalizing Storage Accumulation Profile")
-        l2_app_anim = self.cas_tree.insert(l1_apps, "end", text="4.7 Animal Balance Core Dynamic Profile")
-        l2_app_calc = self.cas_tree.insert(l1_apps, "end", text="4.8 Calculation Multiplication Mathematical")
-        l2_app_dens = self.cas_tree.insert(l1_apps, "end", text="4.9 Density Determination Metrology Profile")
+            ("3.2.4 GLP/GMP Quality Audit Report Generation", lambda: self._render_radio_selector_page("GLP Compliance Logging", "3.2.4", [
+                ("3.2.4.1 Turn off automated audit logs [Factory Default]", "3.2.4.1"),
+                ("3.2.4.2 Print logs exclusively after calibration changes", "3.2.4.2"),
+                ("3.2.4.3 Append standard validation logs to printouts", "3.2.4.3")
+            ], "print_glp_protocol", self._render_print_settings_menu)),
 
-        # Leaf node generation allocations for active application routines
-        self.cas_tree.insert(l2_app_weigh, "end", text="Trigger dynamic standard weight unit toggle frame", values=("4.1", "Toggle"))
-        
-        l3_c_res = self.cas_tree.insert(l2_app_count, "end", text="Piece resolution accuracy limit properties")
-        self.cas_tree.insert(l3_c_res, "end", text="Normal computing scanning window", values=("4.3.1", "Normal"))
-        self.cas_tree.insert(l3_c_res, "end", text="High precision expanded accuracy index", values=("4.3.1", "High"))
-        l3_c_ref = self.cas_tree.insert(l2_app_count, "end", text="Reference updating matrix path structure")
-        self.cas_tree.insert(l3_c_ref, "end", text="Automatic dynamic optimization adaptive adjustment", values=("4.3.2", "Automatic"))
-        self.cas_tree.insert(l3_c_ref, "end", text="Manual profile anchor coordinates pinned", values=("4.3.2", "Manual"))
+            ("3.3.1 Data Bus Decimal Radix Mark", lambda: self._render_radio_selector_page("Decimal Separator", "3.3.1", [
+                ("3.3.1.1 Standard point decimal notation [.]", "3.3.1.1"),
+                ("3.3.1.2 Standard comma decimal notation [,]", "3.3.1.2")
+            ], "pc_decimal_separator", self._render_print_settings_menu)),
 
-        l3_p_dec = self.cas_tree.insert(l2_app_pct, "end", text="Decimal precision output resolution bounds")
-        self.cas_tree.insert(l3_p_dec, "end", text="1 rounding accuracy position numerical value", values=("4.4", "1"))
-        self.cas_tree.insert(l3_p_dec, "end", text="2 rounding accuracy positions numerical value", values=("4.4", "2"))
+            ("3.3.2 Ingested String Output Filter Profile", lambda: self._render_radio_selector_page("Bus Output Format", "3.3.2", [
+                ("3.3.2.1 Output alpha metadata text and numerical value", "3.3.2.1"),
+                ("3.3.2.2 Strip alpha records and send numerical only", "3.3.2.2")
+            ], "pc_output_format", self._render_print_settings_menu))
+        ]
+        for text, callback in sub_menus:
+            btn = ttk.Button(self.sidebar_panel, text=text, style="AndroidBtn.TButton", command=callback)
+            btn.pack(fill="x", pady=3)
 
-        l3_n_prt = self.cas_tree.insert(l2_app_net, "end", text="Print component output string frame metadata parsing")
-        self.cas_tree.insert(l3_n_prt, "end", text="Component values detailed report block text format", values=("4.5", "Component values"))
-        self.cas_tree.insert(l3_n_prt, "end", text="Total accumulation values sum summary textual output", values=("4.5", "Total sum metrics"))
+    def _render_application_modes_menu(self):
+        self._clear_android_surface()
+        self._add_android_back_row("Application Modes", self._render_android_root_view)
 
-        l3_t_prt = self.cas_tree.insert(l2_app_tot, "end", text="Printout components format output telemetry tracking logs")
-        self.cas_tree.insert(l3_t_prt, "end", text="Summary string block profile layout details", values=("4.6", "Summary string"))
+        sub_menus = [
+            ("4.1 Standard Metrological Weighing Only", lambda: self._render_radio_selector_page("Weighing Configuration", "4.1", [
+                ("4.1.1 Baseline analytical weight tracing setup", "4.1")
+            ], "active_app_mode", self._render_application_modes_menu)),
 
-        l3_a_act = self.cas_tree.insert(l2_app_anim, "end", text="Animal activity structural measurement vibration dampening filters")
-        self.cas_tree.insert(l3_a_act, "end", text="Stable environmental site dampening profile asset configuration", values=("4.7.1", "Stable"))
-        self.cas_tree.insert(l3_a_act, "end", text="Hyperactive sensor data tracking signal parsing expansion loop", values=("4.7.1", "Hyperactive"))
-        self.cas_tree.insert(l2_app_anim, "end", text="Execute dynamic sensor mathematical signal averaging loop", values=("4.7.2", "Trigger Start"))
+            ("4.3 Industrial Piece Counting Module", lambda: self._render_radio_selector_page("Counting Accuracy Resolution", "4.3.1", [
+                ("4.3.1.1 Standard piece scanning resolution profile", "Normal"),
+                ("4.3.1.2 High accuracy sample grid computation profile", "High")
+            ], "app_counting_res", self._render_application_modes_menu, set_app_mode="4.3")),
 
-        l3_m_met = self.cas_tree.insert(l2_app_calc, "end", text="Calculation pipeline method formula operations mapped")
-        self.cas_tree.insert(l3_m_met, "end", text="Multiplication formula engine scaling", values=("4.8.1", "Multiplication"))
-        self.cas_tree.insert(l3_m_met, "end", text="Division formula scaling translation", values=("4.8.1", "Division"))
-        l3_m_dec = self.cas_tree.insert(l2_app_calc, "end", text="Assigned decimal precision numerical truncation bounds")
-        self.cas_tree.insert(l3_m_dec, "end", text="3 decimal positions configuration", values=("4.8.2", "3"))
+            ("4.3.2 Adaptive Counting Reference Optimization", lambda: self._render_radio_selector_page("Counting Reference Updating", "4.3.2", [
+                ("4.3.2.1 Automatic mathematical dynamic sample update", "Automatic"),
+                ("4.3.2.2 Freeze and anchor static sample weight baseline", "Manual")
+            ], "app_counting_ref_update", self._render_application_modes_menu)),
 
-        l3_d_dec = self.cas_tree.insert(l2_app_dens, "end", text="Assigned decimal precision metrics rounding boundaries")
-        self.cas_tree.insert(l3_d_dec, "end", text="4 decimal precision placement pattern specification", values=("4.9", "4"))
+            ("4.4 Percentage Truncation Output Format", lambda: self._render_radio_selector_page("Percent Mode Rounding Accuracy", "4.4", [
+                ("4.4.1 Round percent string to individual decimal location", "1"),
+                ("4.4.2 Round percent string to secondary decimal location", "2")
+            ], "app_percent_decimals", self._render_application_modes_menu, set_app_mode="4.4")),
 
+            ("4.5 Multi-Recipe Net Total Formulation Layout", lambda: self._render_radio_selector_page("Net Total Sheet Printing", "4.5", [
+                ("4.5.1 Write distinct ingredient weight itemized records", "Component values"),
+                ("4.5.2 Restrict to total accumulation weight summary", "Total sum metrics")
+            ], "app_net_total_print", self._render_application_modes_menu, set_app_mode="4.5")),
+
+            ("4.6 Storage Totalizing Accumulator Layout", lambda: self._render_radio_selector_page("Totalizing Format Output", "4.6", [
+                ("4.6.1 Print summary string total statistics blocks", "Summary string")
+            ], "app_totalizing_print", self._render_application_modes_menu, set_app_mode="4.6")),
+
+            ("4.7 Dynamic Sensor Animal Balance Averaging", lambda: self._render_radio_selector_page("Vibration Dampening Filters", "4.7.1", [
+                ("4.7.1.1 Standard environmental site dampening filters", "Stable"),
+                ("4.7.1.2 High oscillation hyperactive movement averaging", "Hyperactive")
+            ], "app_animal_activity", self._render_application_modes_menu, set_app_mode="4.7")),
+
+            ("4.8 Mathematical Equation Factor Scaling", lambda: self._render_radio_selector_page("Formula Engine Operators Mapped", "4.8.1", [
+                ("4.8.1.1 Apply multiplication factor multiplier scaling", "Multiplication"),
+                ("4.8.1.2 Apply division divisor value factor scaling", "Division")
+            ], "app_calc_method", self._render_application_modes_menu, set_app_mode="4.8")),
+
+            ("4.8.2 Mathematical Scaling Truncation Bounds", lambda: self._render_radio_selector_page("Formula Decimal Outputs Precision", "4.8.2", [
+                ("4.8.2.1 Truncate result string to 3 placement positions", "3")
+            ], "app_calc_decimals", self._render_application_modes_menu)),
+
+            ("4.9 Metrological Liquid Density Determination", lambda: self._render_radio_selector_page("Density Rounding Specifications", "4.9", [
+                ("4.9.1 Force 4 decimal precision placement formatting", "4")
+            ], "app_density_decimals", self._render_application_modes_menu, set_app_mode="4.9"))
+        ]
+        for text, callback in sub_menus:
+            btn = ttk.Button(self.sidebar_panel, text=text, style="AndroidBtn.TButton", command=callback)
+            btn.pack(fill="x", pady=3)
+
+    def _render_factory_reset_view(self):
+        self._clear_android_surface()
+        self._add_android_back_row("Factory Settings", self._render_android_root_view)
+
+        ttk.Label(self.sidebar_panel, text="Wipe configuration database registers back to baseline industrial standards?", 
+                  style="FieldLabel.TLabel", wraplength=400).pack(anchor="w", pady=10)
+
+        reset_btn = ttk.Button(self.sidebar_panel, text="CONFIRM RESET MATRIX (1.9.1.1)", style="Stop.TButton", command=self._execute_factory_menu_reset)
+        reset_btn.pack(fill="x", pady=15)
+
+    # --- GENERIC LEAF RADIO OPTION PAGE BUILDER MATRIX ---
+    def _render_radio_selector_page(self, title, group_code, options, target_attr, back_callback, 
+                                     clear_dsp=False, update_backlight=False, set_app_mode=None):
+        self._clear_android_surface()
+        self._add_android_back_row(title, back_callback)
+
+        current_val = getattr(self, target_attr)
+        tk_var = tk.StringVar(value=current_val)
+
+        def _on_radio_mutated():
+            selected_code = tk_var.get()
+            setattr(self, target_attr, selected_code)
+            self._write_terminal_log(f"[ANDROID APP UI] State mutated -> Code assigned: {selected_code}")
+            self._set_command_status(f"REGISTRY CODE OPERATIVE: {selected_code}")
+
+            if clear_dsp:
+                self.filter_history_buffer.clear()
+                if selected_code.startswith("1.1.14") or selected_code.startswith("2.1.2") or selected_code.startswith("2.2.2"):
+                    self._reconfigure_asynchronous_clock_intervals(selected_code)
+            
+            if update_backlight:
+                if selected_code == "2.9.8.1":
+                    self.display_label.config(fg="#155E27", bg="#020617")
+                else:
+                    self.display_label.config(fg="#22C55E", bg="#0F172A")
+
+            if set_app_mode:
+                self.active_app_mode = set_app_mode
+
+        radio_card = ttk.Frame(self.sidebar_panel, style="Card.TFrame", padding=15)
+        radio_card.pack(fill="both", expand=True)
+
+        for label_text, data_code in options:
+            rb = ttk.Radiobutton(radio_card, text=label_text, value=data_code, variable=tk_var, command=_on_radio_mutated)
+            rb.pack(anchor="w", pady=6)
+
+    def _on_slider_adjustment(self, val):
+        try:
+            self.target_load = float(val)
+        except ValueError:
+            self.target_load = 0.0
+        self.load_lbl_hint.configure(text=f"Targeted Mass: {self.target_load:,.4f} g")
+
+    # --- SCROLLABLE SIDEBAR TRANSDUCER MANIPULATION PANELS ---
     def _render_scrolling_control_ui(self, parent_frame):
         control_canvas = tk.Canvas(parent_frame, bg="#1E293B", bd=0, highlightthickness=0)
         scrollbar = tk.Scrollbar(parent_frame, orient="vertical", command=control_canvas.yview)
         
         scrollable_content = ttk.Frame(control_canvas, style="ScrollCard.TFrame", padding=15)
-        
-        scrollable_content.bind(
-            "<Configure>",
-            lambda e: control_canvas.configure(scrollregion=control_canvas.bbox("all"))
-        )
+        scrollable_content.bind("<Configure>", lambda e: control_canvas.configure(scrollregion=control_canvas.bbox("all")))
         
         control_canvas.create_window((0, 0), window=scrollable_content, anchor="nw", width=360)
         control_canvas.configure(yscrollcommand=scrollbar.set)
@@ -1092,13 +811,13 @@ class ModernWeighCellSimulator(tk.Tk):
         term_scroll.pack(side="right", fill="y")
         self.message.pack(side="left", fill="both", expand=True)
         
-        self.message.insert("end", "[CORE_BUS] Multi-protocol configuration registries initialized.\n")
+        self.message.insert("end", "[CORE_BUS] Multi-protocol configuration registers initialized.\n")
         self.message.configure(state="disabled")
 
         command_box = ttk.Frame(parent, style="Card.TFrame")
         command_box.pack(fill="x", pady=(12, 0))
         
-        self.lbl_mode_indicator = ttk.Label(command_box, text="Active Decoder: RS232 / USB DUAL CONTEXT LINK", font=("Segoe UI", 9, "bold"), foreground="#38BDF8")
+        self.lbl_mode_indicator = ttk.Label(command_box, text="Active Decoder: SBI / xBPI DUAL LINK", font=("Segoe UI", 9, "bold"), foreground="#38BDF8")
         self.lbl_mode_indicator.pack(anchor="w", pady=2)
         
         entry_row = ttk.Frame(command_box, style="TFrame")
@@ -1107,6 +826,226 @@ class ModernWeighCellSimulator(tk.Tk):
         self.command_entry = ttk.Entry(entry_row, textvariable=self.command_var)
         self.command_entry.pack(side="left", fill="x", expand=True, padx=(0, 6))
         ttk.Button(entry_row, text="Transmit", style="Action.TButton", command=self.send_command).pack(side="right")
+
+    # --- TRANSMISSION RATINGS HANDLERS ENGINE ---
+    def _reconfigure_asynchronous_clock_intervals(self, code):
+        rate_mappings = {
+            "1.1.14.1": 50, "1.1.14.2": 40, "1.1.14.3": 100, "1.1.14.4": 50, "1.1.14.5": 40, "1.1.14.6": 20, "1.1.14.7": 10,
+            "2.1.2.3": 500, "2.1.2.4": 250, "2.1.2.5": 120, "2.1.2.6": 80, "2.1.2.7": 50, "2.1.2.8": 25, "2.1.2.9": 15, "2.1.2.10": 10, "2.1.2.11": 5,
+            "2.2.2.3": 500, "2.2.2.4": 250, "2.2.2.5": 120, "2.2.2.6": 80, "2.2.2.7": 50, "2.2.2.8": 25, "2.2.2.9": 15, "2.2.2.10": 10, "2.2.2.11": 5
+        }
+        self.simulation_tick_rate_ms = rate_mappings.get(code, 50)
+        self._write_terminal_log(f"[CLOCK] Master asynchronous update ticker synced to: {self.simulation_tick_rate_ms}ms")
+
+    def _execute_factory_menu_reset(self):
+        self.active_env_filter = "1.1.1.2"
+        self.active_app_filter = "1.1.2.1"
+        self.active_stability_range = "1.1.3.4"
+        self.active_stability_delay = "1.1.4.2"
+        self.active_taring_mode = "1.1.5.2"
+        self.active_autozero = "1.1.6.1"
+        self.active_weight_unit = "1.1.7.2"
+        self.active_accuracy_digits = "1.1.8.1"
+        self.active_cal_func = "1.1.9.1"
+        self.active_adjust_process = "1.1.10.1"
+        self.active_zero_range = "1.1.11.2"
+        self.active_poweron_zero = "1.1.12.4"
+        self.active_poweron_tarezero = "1.1.13.1"
+        self.active_output_rate = "1.1.14.1"
+        self.active_isocal = "1.1.15.1"
+        
+        self.print_data_output = "3.1.1.1"        
+        self.print_cancel_auto = "3.1.2.1"
+        self.print_cycle_auto = "3.1.3.1"
+        self.print_output_format = "3.1.4.1"
+        self.print_trigger_type = "3.2.1.2"
+        self.print_layout_format = "3.2.2.2"
+        self.print_appl_param = "3.2.3.2"
+        self.print_glp_protocol = "3.2.4.1"
+        self.pc_decimal_separator = "3.3.1.1"     
+        self.pc_output_format = "3.3.2.1"         
+        
+        self.dev_i1_protocol = "2.1.1.1"          
+        self.dev_i1_baud = "2.1.2.7"              
+        self.dev_i1_parity = "2.1.3.3"
+        self.dev_i1_stop_bits = "2.1.4.1"
+        self.dev_i1_handshake = "2.1.5.2"
+        self.dev_i1_data_bits = "2.1.6.1"
+        self.dev_i2_protocol = "2.2.1.1"          
+        self.dev_i2_baud = "2.2.2.7"
+        self.dev_i2_parity = "2.2.3.3"
+        self.dev_i2_stop_bits = "2.2.4.1"
+        self.dev_i2_handshake = "2.2.5.2"
+        self.dev_i2_data_bits = "2.2.6.1"
+        self.dev_i2_detected = "2.2.7.0"
+        self.dev_add_menu = "2.9.1.2"
+        self.dev_add_keypad = "2.9.3.1"            
+        self.dev_add_startup = "2.9.6.4"
+        self.dev_add_backlight = "2.9.8.2"         
+        self.active_app_mode = "4.1"
+
+        self.reset_entire_pipeline()
+        self.display_label.config(fg="#22C55E", bg="#0F172A")
+        self._render_android_root_view()
+        self._write_terminal_log("[RESET] Subsystem registry database explicitly restored to deep factory benchmarks.")
+        messagebox.showinfo("Factory Reset", "All CAS Subsystem configurations reverted.")
+
+    def reset_entire_pipeline(self):
+        self.zero_reference = 0.0
+        self.tare_offset = 0.0
+        self.scale_factor = 1.0
+        self.manual_scale_str.set("1.000000")
+        self.scale_text.set("Calibration Scale: 1.000000")
+        self.zero_text.set("Zero Offset: 0.0000 g")
+        self.tare_text.set("Tare Offset: 0.0000 g")
+
+    def _process_calibrated_weight(self, raw_weight):
+        net = (raw_weight - self.zero_reference) * self.scale_factor
+        return net - self.tare_offset
+
+    def _evaluate_measurement_stability(self, current_weight):
+        self.previous_weights_history.append(current_weight)
+        if len(self.previous_weights_history) > 5:
+            self.previous_weights_history.pop(0)
+        
+        stability_map = {
+            "1.1.3.1": 0.005, "1.1.3.2": 0.01, "1.1.3.3": 0.02, 
+            "1.1.3.4": 0.05, "1.1.3.5": 0.1, "1.1.3.6": 0.2
+        }
+        allowed_delta = stability_map.get(self.active_stability_range, 0.05)
+        max_deviation = max(self.previous_weights_history) - min(self.previous_weights_history)
+        self.is_currently_stable = max_deviation <= allowed_delta
+
+    def apply_manual_scaling(self):
+        if self.dev_add_keypad == "2.9.3.2":
+            messagebox.showerror("Access Blocked", "Front tactile console operations are BLOCKED (2.9.3.2).")
+            return
+        try:
+            factor = float(self.manual_scale_str.get().strip())
+        except ValueError:
+            messagebox.showerror("Validation Fault", "Invalid numerical scalar index.")
+            return
+        if factor <= 0: return
+        self.scale_factor = factor
+        self.scale_text.set(f"Calibration Scale: {self.scale_factor:.6f}")
+
+    def execute_zero_scaling(self):
+        if self.dev_add_keypad == "2.9.3.2": return
+        current_raw = self._generate_live_signal() if self.machine_running else self.simulated_load
+        max_allowed_zero = 820.0 if self.active_zero_range == "1.1.11.4" else 164.0  
+        if abs(current_raw) > max_allowed_zero:
+            messagebox.showerror("Zero Error", "Transducer offset out of bounds mapping constraints.")
+            return
+        self.zero_reference = current_raw
+        self.zero_text.set(f"Zero Offset: {self.zero_reference:,.4f} g")
+
+    def execute_tare(self):
+        if self.dev_add_keypad == "2.9.3.2": return
+        if self.active_taring_mode == "1.1.5.2" and not self.is_currently_stable:
+            self._write_terminal_log("[TARE BLOCKED] Data line stream unstable.")
+            return
+        current_raw = self._generate_live_signal() if self.machine_running else self.simulated_load
+        self.tare_offset = (current_raw - self.zero_reference) * self.scale_factor
+        self.tare_text.set(f"Tare Offset: {self.tare_offset:,.4f} g")
+
+    def execute_auto_scale(self):
+        if self.dev_add_keypad == "2.9.3.2": return
+        try:
+            reference_weight = float(self.auto_ref_str.get().strip())
+        except ValueError: return
+        if reference_weight <= 0: return
+        sample_raw = self._generate_live_signal() if self.machine_running else max(self.simulated_load, 0.001)
+        delta_span = sample_raw - self.zero_reference
+        if abs(delta_span) < 1e-5: return
+        self.scale_factor = reference_weight / delta_span
+        self.manual_scale_str.set(f"{self.scale_factor:.6f}")
+        self.scale_text.set(f"Calibration Scale: {self.scale_factor:.6f}")
+
+    def _import_sensor_log_file(self):
+        file_path = filedialog.askopenfilename(filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")])
+        if not file_path: return
+        try:
+            temp_buffer = []
+            with open(file_path, "r") as f:
+                for line in f:
+                    cleaned = line.strip()
+                    if cleaned.startswith("ADC:"):
+                        try: temp_buffer.append(float(cleaned.split(":")[1]))
+                        except: continue
+            if not temp_buffer: return
+            self.file_stream_buffer = temp_buffer
+            self.file_stream_index = 0
+            self.loaded_file_path = os.path.basename(file_path)
+            self.is_file_stream_active = True
+            self.stream_status_text.set(f"INPUT TRACK: {self.loaded_file_path}")
+            self._write_terminal_log(f"[INGESTION] Buffered {len(self.file_stream_buffer)} records successfully.")
+        except Exception as e: messagebox.showerror("I/O Error", str(e))
+
+    def _toggle_stream_source_mode(self):
+        if not self.file_stream_buffer: return
+        self.is_file_stream_active = not self.is_file_stream_active
+        self.stream_status_text.set(f"INPUT TRACK: {self.loaded_file_path}" if self.is_file_stream_active else "INPUT TRACK: BALANCED SLIDER")
+
+    def start_machine(self):
+        if self.machine_running: return
+        self.machine_running = True
+        self.status_text.set("EMULATOR BUS CORE: ONLINE")
+        self._write_terminal_log("[SYSTEM] Data telemetry processor pipeline started.")
+
+    def stop_machine(self):
+        if not self.machine_running: return
+        self.machine_running = False
+        self.blink_on = False
+        self.status_text.set("EMULATOR BUS CORE: OFFLINE")
+        self.blinker_canvas.itemconfig(self.blinker_node, fill="#64748B", outline="#334155")
+        self.display_text.set("------")
+        self._write_terminal_log("[SYSTEM] Data telemetry processor pipeline halted.")
+
+    def send_command(self):
+        raw_input = self.command_var.get().strip()
+        if not raw_input: return
+        if raw_input.upper().startswith("ESC") or not all(c in "0123456789ABCDEFabcdef " for c in raw_input):
+            self.protocol_mode = "RS232/SBI"
+            self.lbl_mode_indicator.config(text="Active Decoder: LEGACY RS232-SBI TERMINAL CORE", foreground="#EF4444")
+            tx_frame = self._process_legacy_rs232_ascii(raw_input.upper())
+            self._write_terminal_log(f"[RS232 RX] '{raw_input}' | [TX] -> {tx_frame}")
+        else:
+            self.protocol_mode = "xBPI"
+            self.lbl_mode_indicator.config(text="Active Decoder: SARTORIUS xBPI COMPILER LINK", foreground="#4ADE80")
+            try:
+                byte_array = bytes.fromhex(raw_input)
+                tx_bytes = self._process_binary_xbpi_frame(byte_array)
+                tx_hex_string = " ".join(f"{b:02X}" for b in tx_bytes)
+                self._write_terminal_log(f"[xBPI RX] {raw_input} | [TX] -> {tx_hex_string}")
+            except Exception as e:
+                self._write_terminal_log(f"[xBPI ERROR] Dropped structural frame logic: {str(e)}")
+
+    def _process_binary_xbpi_frame(self, data: bytes) -> bytes:
+        if len(data) < 3: 
+            return bytes([0x03, 0x41, 0x92])  
+        function_number = data[3] if len(data) > 3 else 0x00
+        response_frame = bytearray()
+        
+        if function_number == 0x1E:   
+            response_frame.extend(bytes([0x48, 0x42, 0x14, 0x8F, 0x5C, 0x28, 0x34, 0x43]))
+            self.adjustment_state = "idle"
+        elif function_number == 0x16: 
+            self.execute_tare()
+            response_frame.extend(bytes([0x00]))  
+        elif function_number == 0x18: 
+            self.execute_zero_scaling()
+            response_frame.extend(bytes([0x00]))  
+        else: 
+            response_frame.extend(bytes([0x00]))
+            
+        final_tx_packet = bytearray([len(response_frame) + 2, 0x41]) + response_frame
+        final_tx_packet.append(sum(final_tx_packet) % 256)
+        return bytes(final_tx_packet)
+
+    def _process_legacy_rs232_ascii(self, cmd: str) -> str:
+        if cmd in {"ESC T", "TARE"}: self.execute_tare(); return "TARE ACK"
+        if cmd in {"ESC V", "ZERO"}: self.execute_zero_scaling(); return "ZERO ACK"
+        return f"WT + {self.last_display_value:,.4f} g"
 
     def _generate_live_signal(self):
         if self.is_file_stream_active and self.file_stream_buffer:
@@ -1130,7 +1069,6 @@ class ModernWeighCellSimulator(tk.Tk):
         self.noise_seed = (self.noise_seed + 0.5) % 500.0
         raw_signal_output = source_weight + environmental_noise + vibration_drift
         
-        # Animal Balance tracking application execution criteria simulation layer overrides filter profiles
         if self.active_app_mode == "4.7" and self.app_animal_activity == "Hyperactive":
             filter_window_size = 65
         elif self.active_app_filter == "1.1.2.1": filter_window_size = 20
@@ -1155,12 +1093,10 @@ class ModernWeighCellSimulator(tk.Tk):
             self._evaluate_measurement_stability(transformed_net_weight)
             stability_flag = " " if self.is_currently_stable else " [UNSTABLE]"
             
-            # Unit Evaluation conversion logic matrix assignment (1.1.7.2 to 1.1.7.23)
             unit_meta = self.unit_map.get(self.active_weight_unit, {"name": "g", "factor": 1.0})
             display_weight = transformed_net_weight * unit_meta["factor"]
             unit_label = f" {unit_meta['name']}"
             
-            # Numeric rounding interval calculation execution rules (1.1.8)
             if self.active_accuracy_digits == "1.1.8.7": fmt_pattern = "{:,.3f}"
             elif self.active_accuracy_digits == "1.1.8.3": fmt_pattern = "{:,.3f}"
             elif self.active_accuracy_digits == "1.1.8.4": fmt_pattern = "{:,.2f}"
@@ -1170,13 +1106,11 @@ class ModernWeighCellSimulator(tk.Tk):
                 
             display_string_output = fmt_pattern.format(display_weight)
             
-            # Print suppression context mutations (3.3.2) [cite: 3]
             if self.pc_output_format == "3.3.2.2":
                 final_display_frame = f"{display_string_output}{stability_flag}"
             else:
                 final_display_frame = f"{display_string_output}{unit_label}{stability_flag}"
 
-            # Decimal swap notation replacement framework (3.3.1) [cite: 3]
             if self.pc_decimal_separator == "3.3.1.2":
                 final_display_frame = final_display_frame.replace(".", ",")
 
@@ -1184,7 +1118,7 @@ class ModernWeighCellSimulator(tk.Tk):
             self.raw_text.set(f"Transducer Input: {raw_signal:,.4f} g")
             
             if random.random() < 0.02:
-                self._write_terminal_log(f"[TX TELEMETRY] App Context: {self.active_app_mode} | Stream Speed: {self.simulation_tick_rate_ms}ms")
+                self._write_terminal_log(f"[TX TELEMETRY] Active App Mode Layer Context: {self.active_app_mode}")
         else:
             self.display_text.set("------")
             self.raw_text.set(f"Transducer Input: {self.simulated_load:,.4f} g")
