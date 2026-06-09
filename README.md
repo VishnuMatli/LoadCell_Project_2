@@ -1,0 +1,5 @@
+# Weigh Scale Simulator
+
+#### Report of 09-Jun-2026
+
+* Added Active Print Menu
