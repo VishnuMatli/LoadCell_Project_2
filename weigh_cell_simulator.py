@@ -719,7 +719,7 @@ class ModernWeighCellSimulator(tk.Tk):
         power_row = ttk.Frame(scrollable_content, style="TFrame")
         power_row.pack(fill="x", pady=(0, 15))
         ttk.Button(power_row, text="START CELL", style="Start.TButton", command=self.start_machine).pack(side="left")
-        ttk.Button(power_row, text="STOP INTEL", style="Stop.TButton", command=self.stop_machine).pack(side="left", padx=10)
+        ttk.Button(power_row, text="STOP CELL", style="Stop.TButton", command=self.stop_machine).pack(side="left", padx=10)
 
         ttk.Label(scrollable_content, text="TRANSDUCER INGESTION ENGINE", style="CardTitleX.TLabel").pack(anchor="w")
         ingest_row = ttk.Frame(scrollable_content, style="TFrame")
@@ -817,7 +817,7 @@ class ModernWeighCellSimulator(tk.Tk):
         command_box = ttk.Frame(parent, style="Card.TFrame")
         command_box.pack(fill="x", pady=(12, 0))
         
-        self.lbl_mode_indicator = ttk.Label(command_box, text="Active Decoder: SBI / xBPI DUAL LINK", font=("Segoe UI", 9, "bold"), foreground="#38BDF8")
+        self.lbl_mode_indicator = ttk.Label(command_box, text="Active Decoder: SBI / xBPI DUAL LINK", font=("Segoe UI", 9, "bold"), foreground="#000000")
         self.lbl_mode_indicator.pack(anchor="w", pady=2)
         
         entry_row = ttk.Frame(command_box, style="TFrame")
@@ -1006,12 +1006,12 @@ class ModernWeighCellSimulator(tk.Tk):
         if not raw_input: return
         if raw_input.upper().startswith("ESC") or not all(c in "0123456789ABCDEFabcdef " for c in raw_input):
             self.protocol_mode = "RS232/SBI"
-            self.lbl_mode_indicator.config(text="Active Decoder: LEGACY RS232-SBI TERMINAL CORE", foreground="#EF4444")
+            self.lbl_mode_indicator.config(text="Active Decoder: LEGACY RS232-SBI TERMINAL CORE", foreground="#000000")
             tx_frame = self._process_legacy_rs232_ascii(raw_input.upper())
             self._write_terminal_log(f"[RS232 RX] '{raw_input}' | [TX] -> {tx_frame}")
         else:
             self.protocol_mode = "xBPI"
-            self.lbl_mode_indicator.config(text="Active Decoder: SARTORIUS xBPI COMPILER LINK", foreground="#4ADE80")
+            self.lbl_mode_indicator.config(text="Active Decoder: SARTORIUS xBPI COMPILER LINK", foreground="#000000")
             try:
                 byte_array = bytes.fromhex(raw_input)
                 tx_bytes = self._process_binary_xbpi_frame(byte_array)
