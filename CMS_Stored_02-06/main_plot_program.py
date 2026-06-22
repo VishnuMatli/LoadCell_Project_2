@@ -202,21 +202,14 @@ def calculate_bandwidth(series):
         return 0.0
     return float(np.nanmax(series) - np.nanmin(series))
 
-
-def get_filtered_start_frame():
-    return len(g_raw_data)
-
-
 def is_filtered_only_mode():
     return bool(g_filtered_only_var.get()) if g_filtered_only_var is not None else False
-
 
 def _normalized_sinc(n, alpha, cutoff_freq=CUTOFF_FREQ_HZ, sampling_freq=SAMPLING_FREQ_HZ):
     fc = cutoff_freq / sampling_freq
     if abs(float(n) - float(alpha)) < 1e-9:
         return 2.0 * fc
     return np.sin(2.0 * np.pi * fc * (float(n) - float(alpha))) / (np.pi * (float(n) - float(alpha)))
-
 
 def _kaiser_i0(x):
     total = 1.0
@@ -228,7 +221,6 @@ def _kaiser_i0(x):
         if term < 1e-8:
             break
     return total
-
 
 def generate_window_coefficients(window_method, num_taps):
     num_taps = int(num_taps)
@@ -478,18 +470,14 @@ def set_visible_limits(frame):
 
     raw_total = len(g_raw_data)
     filtered_total = len(current_filtered_series())
-    filtered_start = get_filtered_start_frame()
     filtered_only = is_filtered_only_mode()
 
     if filtered_only:
         raw_visible_frame = -1
-        filtered_visible_frame = frame
-    elif frame < raw_total:
-        raw_visible_frame = frame
-        filtered_visible_frame = -1
+        filtered_visible_frame = min(frame, filtered_total - 1)
     else:
-        raw_visible_frame = raw_total - 1
-        filtered_visible_frame = frame - filtered_start
+        raw_visible_frame = min(frame, raw_total - 1)
+        filtered_visible_frame = min(frame, filtered_total - 1)
 
     if raw_total <= PLOT_WINDOW_SIZE:
         raw_x_min = 0
@@ -761,54 +749,46 @@ def init_plot():
 
 def update_frame(frame):
     filtered_only = is_filtered_only_mode()
+
     raw_total = len(g_raw_data)
     filtered_total = len(current_filtered_series())
-    filtered_start = get_filtered_start_frame()
-
-    if filtered_only:
-        raw_visible_frame = -1
-        filtered_visible_frame = frame
-    elif frame < raw_total:
-        raw_visible_frame = frame
-        filtered_visible_frame = -1
-    else:
-        raw_visible_frame = raw_total - 1
-        filtered_visible_frame = frame - filtered_start
-
-    x = np.arange(raw_visible_frame + 1)
-    y_raw = g_raw_data[: raw_visible_frame + 1]
 
     if filtered_only:
         raw_line.set_data([], [])
-    else:
-        raw_line.set_data(x, y_raw)
 
-    if filtered_visible_frame >= 0:
-        filtered_x = np.arange(filtered_visible_frame + 1)
-        if filtered_only:
-            active_filtered_series = current_filtered_series()
-            y_ref = active_filtered_series[: min(filtered_visible_frame + 1, len(active_filtered_series))]
-            filtered_line.set_data(filtered_x, y_ref)
-            manual_filtered_line.set_data([], [])
-        else:
-            y_ref = g_reference_filtered_data[: min(filtered_visible_frame + 1, len(g_reference_filtered_data))]
-            filtered_line.set_data(filtered_x, y_ref)
+        end_idx = min(frame + 1, filtered_total)
 
-            if has_manual_output():
-                y_filt = g_manual_filtered_data[: min(filtered_visible_frame + 1, len(g_manual_filtered_data))]
-                manual_filtered_line.set_data(filtered_x, y_filt)
-            else:
-                y_filt = g_filtered_data[: min(filtered_visible_frame + 1, len(g_filtered_data))]
-                manual_filtered_line.set_data(filtered_x, y_filt)
-    else:
-        filtered_line.set_data([], [])
+        filtered_x = np.arange(end_idx)
+        filtered_y = current_filtered_series()[:end_idx]
+
+        filtered_line.set_data(filtered_x, filtered_y)
         manual_filtered_line.set_data([], [])
+
+    else:
+        raw_end = min(frame + 1, raw_total)
+        filt_end = min(frame + 1, filtered_total)
+
+        raw_line.set_data(
+            np.arange(raw_end),
+            g_raw_data[:raw_end]
+        )
+
+        filtered_line.set_data(
+            np.arange(filt_end),
+            g_reference_filtered_data[:filt_end]
+        )
+
+        if has_manual_output():
+            manual_filtered_line.set_data(
+                np.arange(filt_end),
+                g_manual_filtered_data[:filt_end]
+            )
+        else:
+            manual_filtered_line.set_data([], [])
 
     set_visible_limits(frame)
 
     return raw_line, filtered_line, manual_filtered_line
-
-
 def restart_animation():
     global g_animation
     if g_animation and g_animation.event_source:
@@ -819,7 +799,10 @@ def restart_animation():
             g_canvas.draw_idle()
         return
 
-    n = len(current_filtered_series()) if is_filtered_only_mode() else len(g_raw_data) + len(current_filtered_series())
+    n = len(current_filtered_series()) if is_filtered_only_mode() else max(
+        len(g_raw_data),
+        len(current_filtered_series())
+    )
     if n <= 0:
         print("[APP] No data to animate")
         return
