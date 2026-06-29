@@ -68,6 +68,7 @@ g_root = None
 g_canvas = None
 g_status_var = None
 g_bandwidth_var = None
+g_delay_var = None
 g_file_var = None
 g_window_var = None
 g_speed_var = None
@@ -198,7 +199,7 @@ def generate_window_coefficients(window_method, num_taps):
     return coeffs
 
 def start_data_stream(filename, window_method, coeff_count):
-    """Start background thread to read file and apply filters in REAL-TIME with 20ms/sample timing."""
+    """Start background thread to read file and apply filters in REAL-TIME with 20ms/sample timing + FIR overhead."""
     global stream_thread, stop_thread, stream_started, ref_filter, manual_filter, manual_mode
     global raw_buffer, ref_filtered_buffer, manual_filtered_buffer
     
@@ -246,7 +247,7 @@ def start_data_stream(filename, window_method, coeff_count):
     
     # START REAL-TIME PROCESSING THREAD
     def stream_worker():
-        """This thread simulates LIVE load cell data: reads 1 sample every 20ms (50Hz)"""
+        """This thread simulates LIVE load cell data: reads 1 sample every 20ms (50Hz) + FIR compute overhead"""
         try:
             with open(filepath, 'r') as f:
                 # Process file LINE BY LINE as if it's streaming from a real load cell
@@ -290,9 +291,12 @@ def start_data_stream(filename, window_method, coeff_count):
                         except ValueError:
                             continue  # Skip invalid lines
                     
-                    # 3. SIMULATE REAL-TIME TIMING: 20ms PER SAMPLE (50Hz load cell rate)
-                    # This is CRITICAL - ensures processing matches real load cell timing
-                    time.sleep(0.02)  # 20ms = 50Hz sampling rate
+                    # 3. SIMULATE REAL-TIME TIMING: base 20ms/sample + extra per-tap overhead
+                    # More coefficients = more multiply-accumulate work → perceptibly slower stream
+                    n_taps = len(ref_filter.coeffs) if ref_filter is not None else 1
+                    # Base 20ms for 50Hz rate + 0.15ms per tap to simulate FIR compute cost
+                    sample_delay = 0.02 + max(0, (n_taps - 1)) * 0.00015
+                    time.sleep(sample_delay)
                     
         except Exception as e:
             print(f"[APP] Stream error: {e}")
@@ -335,7 +339,10 @@ def calculate_bandwidth(series):
 def is_filtered_only_mode():
     return bool(g_filtered_only_var.get()) if g_filtered_only_var is not None else False
 
-def update_filter_summary():
+def update_bandwidth_summary():
+    """Update the bandwidth summary label in the stats frame."""
+    if g_bandwidth_var is None:
+        return
     raw_len, ref_len, man_len = get_buffer_lengths()
     raw_list = list(raw_buffer) if raw_len > 0 else []
     ref_list = list(ref_filtered_buffer) if ref_len > 0 else []
@@ -347,24 +354,40 @@ def update_filter_summary():
     
     display_bw = man_bw if has_manual_output() else ref_bw
     
-    if g_bandwidth_var is not None:
-        if is_filtered_only_mode():
-            if has_manual_output():
-                g_bandwidth_var.set(
-                    f"Filtered bandwidth: {display_bw:.2f}    |    Manual taps: {len(manual_filter.coeffs) if manual_filter else 0}"
-                )
-            else:
-                g_bandwidth_var.set(f"Filtered bandwidth: {display_bw:.2f}")
+    if is_filtered_only_mode():
+        if has_manual_output():
+            g_bandwidth_var.set(
+                f"Filtered bandwidth: {display_bw:.2f}    |    Manual taps: {len(manual_filter.coeffs) if manual_filter else 0}"
+            )
         else:
-            if has_manual_output():
-                g_bandwidth_var.set(
-                    f"Raw bandwidth: {raw_bw:.2f}    |    Reference: {ref_bw:.2f}    |    Manual: {display_bw:.2f}"
-                )
-            else:
-                g_bandwidth_var.set(
-                    f"Raw bandwidth: {raw_bw:.2f}    |    Filtered bandwidth: {display_bw:.2f}"
-                )
-    update_status_text()
+            g_bandwidth_var.set(f"Filtered bandwidth: {display_bw:.2f}")
+    else:
+        if has_manual_output():
+            g_bandwidth_var.set(
+                f"Raw bandwidth: {raw_bw:.2f}    |    Reference: {ref_bw:.2f}    |    Manual: {display_bw:.2f}"
+            )
+        else:
+            g_bandwidth_var.set(
+                f"Raw bandwidth: {raw_bw:.2f}    |    Filtered bandwidth: {display_bw:.2f}"
+            )
+
+def update_delay_display():
+    """Update the group delay label in the stats frame."""
+    if g_delay_var is None:
+        return
+    active_filter = manual_filter if has_manual_output() else ref_filter
+    if active_filter is None:
+        g_delay_var.set("Group Delay: —")
+        return
+    n_taps = len(active_filter.coeffs)
+    group_delay_samples = (n_taps - 1) / 2.0
+    # Each sample is at 20ms base rate + tap overhead
+    sample_period_ms = 20.0 + max(0, n_taps - 1) * 0.15
+    group_delay_ms = group_delay_samples * sample_period_ms
+    g_delay_var.set(
+        f"Group Delay: {group_delay_samples:.1f} samples  ≈  {group_delay_ms:.1f} ms  "
+        f"(N={n_taps} taps, {sample_period_ms:.2f} ms/sample)"
+    )
 
 def update_status_text(prefix=None):
     base = f"File: {g_base_filename} | Window: {g_selected_window} | Speed: {g_interval_ms} ms"
@@ -445,61 +468,32 @@ def recompute_manual_output():
 def update_plot_titles():
     base = os.path.basename(g_base_filename)
     if axes is not None:
-        axes[0].set_title(f"Raw ADC Data - {base}")
-        if has_manual_output():
-            axes[1].set_title(f"Manual FIR Filtered Data vs Reference - {base}")
-        else:
-            axes[1].set_title(f"FIR Filtered Data ({g_selected_window}) - {base}")
-
-def set_visible_limits(current_length):
-    """
-    Update axis limits dynamically for raw and filtered plots.
-    Offsets the filtered plot X-axis by the filter's group delay.
-    """
-    # 1. Get buffer stats and determine filter delay (Taps/2)
-    raw_len, ref_len, man_len = get_buffer_lengths()
-    taps = len(manual_filter.coeffs) if manual_mode else len(ref_filter.coeffs)
-    delay = taps // 2
-    
-    with data_lock:
-        raw_data = list(raw_buffer)
-        current_filtered = list(manual_filtered_buffer if has_manual_output() else ref_filtered_buffer)
-    
-    # 2. X-axis Limits (Raw Data)
-    # Standard scrolling window for the raw signal
-    raw_x_max = max(PLOT_WINDOW_SIZE, raw_len)
-    raw_x_min = max(0, raw_x_max - PLOT_WINDOW_SIZE)
-    axes[0].set_xlim(raw_x_min, raw_x_max)
-    
-    # 3. X-axis Limits (Filtered Data - Offset by Delay)
-    # The X-axis for filtered data starts at 'delay' samples
-    filt_data_len = len(current_filtered)
-    filt_x_max = max(PLOT_WINDOW_SIZE, filt_data_len + delay)
-    filt_x_min = max(0, filt_x_max - PLOT_WINDOW_SIZE)
-    axes[1].set_xlim(filt_x_min, filt_x_max)
-    
-    # 4. Y-axis Auto-scaling
-    # Raw signal Y-scaling
-    if raw_len > 0:
-        y_min = np.nanmin(raw_data)
-        y_max = np.nanmax(raw_data)
-        span = y_max - y_min
-        pad = max(span * 0.12, 0.1)
-        axes[0].set_ylim(y_min - pad, y_max + pad)
-    
-    # Filtered signal Y-scaling
-    if filt_data_len > 0:
-        y_min = np.nanmin(current_filtered)
-        y_max = np.nanmax(current_filtered)
-        span = y_max - y_min
-        pad = max(span * 0.12, 0.1)
-        axes[1].set_ylim(y_min - pad, y_max + pad)
+        axes[0].set_title(f"Raw ADC Data - {base}", fontsize=12, weight="bold", color="#243043")
         
+        # Determine active filter for group delay display
+        if has_manual_output():
+            n = len(manual_filter.coeffs)
+            filter_type = "Manual FIR"
+        else:
+            n = len(ref_filter.coeffs) if ref_filter is not None else 0
+            filter_type = "FIR" if n > 0 else "No Filter"
+        
+        if n > 0:
+            group_delay = (n - 1) / 2.0
+            axes[1].set_title(f"{filter_type} Filtered Data - {base}\n"
+                              f"Group Delay: {group_delay:.1f} samples", 
+                              fontsize=12, weight="bold", color="#243043")
+        else:
+            axes[1].set_title(f"Filtered Data - {base}", 
+                              fontsize=12, weight="bold", color="#243043")
+    
+    axes[1].legend(loc="upper right", frameon=True, facecolor="white")
+
 def init_plot():
     """Initialize the GUI components - MUST BE DEFINED BEFORE MAIN CALLS IT"""
     global fig, axes, raw_line, filtered_line, manual_filtered_line, g_canvas, control_frame, stats_frame
     global sidebar_canvas, sidebar_scrollbar, sidebar_inner, g_coeff_count_var, g_filtered_only_var
-    global g_raw_axes_pos, g_filtered_axes_pos, g_filtered_only_axes_pos
+    global g_raw_axes_pos, g_filtered_axes_pos, g_filtered_only_axes_pos, g_bandwidth_var, g_delay_var
     
     plt.close("all")
     fig = Figure(figsize=(12, 8), dpi=100)
@@ -567,6 +561,17 @@ def init_plot():
         padx=16,
     )
     bandwidth_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+    delay_label = tk.Label(
+        stats_frame,
+        textvariable=g_delay_var,
+        bg="#dce8f7",
+        fg="#2952a3",
+        font=("TkDefaultFont", 10, "bold"),
+        anchor="center",
+        padx=16,
+    )
+    delay_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
     status_label = tk.Label(
         stats_frame,
@@ -674,6 +679,29 @@ def init_plot():
     action_panel.pack(fill=tk.X, padx=14, pady=(6, 10))
 
     def colored_button(text, color, command):
+        return tk.Label(action_panel, text="Coefficient Control", bg="#1f2d3d", fg="#bcd0ea", font=("TkDefaultFont", 9, "bold")).pack(anchor="w", pady=(2,0))
+
+    def on_coeff_count_changed(*_args):
+        """Restart stream and plot from scratch whenever the coefficient count changes."""
+        selected_file = g_file_var.get().strip()
+        if not selected_file:
+            return
+        try:
+            coeff_count = int(g_coeff_count_var.get().strip())
+        except ValueError:
+            return
+        # Full restart: stop stream, clear buffers, restart
+        if start_data_stream(selected_file, g_selected_window, coeff_count):
+            global g_base_filename, g_plot_running
+            g_base_filename = os.path.basename(selected_file)
+            g_plot_running = False
+            update_bandwidth_summary()
+            update_delay_display()
+            g_root.after(300, lambda: start_plot() if not g_plot_running else None)
+
+    g_coeff_count_var.trace_add("write", on_coeff_count_changed)
+
+    def colored_button(text, color, command):
         return tk.Button(
             action_panel,
             text=text,
@@ -713,39 +741,84 @@ def init_plot():
     window_combo.bind("<<ComboboxSelected>>", on_window_selected)
     speed_combo.bind("<<ComboboxSelected>>", on_speed_selected)
 
-def update_frame(_):
+def update_frame(frame_index):
+    """Called by FuncAnimation for each frame - PLOTS CURRENT BUFFER CONTENTS"""
     filtered_only = is_filtered_only_mode()
     
-    # Calculate group delay (Taps/2) to align filtered plot with raw data
-    taps = len(manual_filter.coeffs) if manual_mode else len(ref_filter.coeffs)
-    delay = taps // 2
-    
+    # Get current data (thread-safe snapshot)
     with data_lock:
         raw_data = list(raw_buffer)
         ref_data = list(ref_filtered_buffer)
         man_data = list(manual_filtered_buffer)
     
-    # Plot Raw Data
-    if not filtered_only:
-        raw_line.set_data(np.arange(len(raw_data)), raw_data)
+    # Update raw data plot (top axis)
+    if filtered_only:
+        raw_line.set_data([], [])  # Hide raw data in filtered-only mode
     else:
-        raw_line.set_data([], [])
+        if raw_data:
+            raw_line.set_data(np.arange(len(raw_data)), raw_data)
+            axes[0].set_xlim(0, max(len(raw_data) - 1, 1))
+            # Adjust Y-axis for raw data plot
+            y_min = np.nanmin(raw_data)
+            y_max = np.nanmax(raw_data)
+            span = y_max - y_min
+            pad = max(span * 0.12, 0.1)
+            axes[0].set_ylim(y_min - pad, y_max + pad)
+        else:
+            raw_line.set_data([], [])
+            axes[0].set_xlim(0, PLOT_WINDOW_SIZE)
+            axes[0].set_ylim(0, 1)  # Fallback for no data
     
-    # Plot Filtered Data with X-axis offset (delay)
-    # This removes the "straight line" at the start
-    if has_manual_output():
-        man_y = man_data
-        manual_filtered_line.set_data(np.arange(delay, delay + len(man_y)), man_y)
-        filtered_line.set_data([], []) # Hide ref if manual is active
+    # Update filtered data plot (bottom axis)
+    if filtered_only:
+        # Show only filtered data (reference or manual)
+        if has_manual_output() and len(man_data) > 0:
+            filtered_line.set_data(np.arange(len(man_data)), man_data)
+            manual_filtered_line.set_data([], [])
+            manual_filtered_line.set_visible(False)
+            label = "Manual FIR Output"
+        elif len(ref_data) > 0:
+            filtered_line.set_data(np.arange(len(ref_data)), ref_data)
+            manual_filtered_line.set_data([], [])
+            manual_filtered_line.set_visible(False)
+            label = "FIR Filtered Data"
+        else:
+            filtered_line.set_data([], [])
+            manual_filtered_line.set_data([], [])
+            manual_filtered_line.set_visible(False)
+            axes[1].set_ylim(0, 1)  # Fallback
     else:
-        ref_y = ref_data
-        filtered_line.set_data(np.arange(delay, delay + len(ref_y)), ref_y)
-        manual_filtered_line.set_data([], [])
-
-    # Pass the total length including delay to set_visible_limits
-    set_visible_limits(len(raw_data) if not filtered_only else len(ref_data) + delay)
+        # Show both reference and manual (if active)
+        if len(ref_data) > 0:
+            filtered_line.set_data(np.arange(len(ref_data)), ref_data)
+        else:
+            filtered_line.set_data([], [])
+            axes[1].set_xlim(0, PLOT_WINDOW_SIZE)
+        
+        if has_manual_output() and len(man_data) > 0:
+            manual_filtered_line.set_data(np.arange(len(man_data)), man_data)
+            manual_filtered_line.set_visible(True)
+        else:
+            manual_filtered_line.set_data([], [])
+            manual_filtered_line.set_visible(False)
+        
+        # Adjust Y-axis for filtered data plot (consider both signals if manual active)
+        all_data = ref_data + (man_data if has_manual_output() else [])
+        if len(all_data) > 0:
+            y_min = np.nanmin(all_data)
+            y_max = np.nanmax(all_data)
+            span = y_max - y_min
+            pad = max(span * 0.12, 0.1)
+            axes[1].set_ylim(y_min - pad, y_max + pad)
+        else:
+            axes[1].set_ylim(0, 1)  # Fallback
+    
+    # Update titles (shows group delay)
+    update_plot_titles()
+    axes[1].legend(loc="upper right", frameon=True, facecolor="white")
     
     return raw_line, filtered_line, manual_filtered_line
+
 def restart_animation():
     global g_animation
     if g_animation and g_animation.event_source:
@@ -756,59 +829,64 @@ def restart_animation():
             g_canvas.draw_idle()
         return
     
-    # By setting repeat=True and no frames argument, 
-    # it will keep calling update_frame indefinitely.
+    # Run animation indefinitely (real-time oscilloscope behavior)
     g_animation = FuncAnimation(
         fig,
         update_frame,
         interval=g_interval_ms,
         blit=False,
-        repeat=True,
+        repeat=True,  # Critical: run indefinitely
     )
     if g_canvas is not None:
         g_canvas.draw_idle()
 
 def apply_manual_coeffs_from_controls():
-    global manual_filter, manual_mode
-    
-    if g_coeff_count_var is None or g_selected_window == "":
+    global manual_filter, manual_mode, g_base_filename, g_selected_window
+    selected_file = g_file_var.get().strip()
+    if not selected_file:
+        update_status_text("No file selected")
         return
-    
     try:
         coeff_count = int(g_coeff_count_var.get().strip())
-        coeffs = generate_window_coefficients(g_selected_window, coeff_count)
-        manual_filter = FIRFilter(coeffs)
-        manual_mode = True
-    except Exception as exc:
-        update_status_text(f"Invalid coefficient count: {exc}")
+    except:
+        update_status_text("Invalid coefficient count")
         return
+
+    # Stop any existing stream
+    stop_data_stream()
     
-    # IMPORTANT: When manual filter is created, we need to prime it with current buffer state
-    # to avoid transient effects. We'll fill the filter state with the last N samples
-    # where N = number of taps.
+    # Clear buffers
     with data_lock:
-        # Clear manual buffer
+        raw_buffer.clear()
+        ref_filtered_buffer.clear()
         manual_filtered_buffer.clear()
-        
-        # Prime the filter with current raw buffer state (to avoid startup transient)
-        if len(raw_buffer) > 0:
-            # Get last N samples where N = filter order (taps-1) for proper priming
-            primes = list(raw_buffer)[-len(manual_filter.coeffs)+1:] if len(manual_filter.coeffs) > 1 else []
-            # Prime the filter state
-            for sample in primes:
-                manual_filter.filter(sample)
-            # Now add current buffer to manual_filtered_buffer
-            for sample in raw_buffer:
-                manual_filtered_buffer.append(manual_filter.filter(sample))
     
-    update_plot_titles()
-    update_display_mode()
-    update_filter_summary()
-    restart_animation()
+    # Create filters with the current window method and new coefficient count
+    try:
+        ref_coeffs = generate_window_coefficients(g_selected_window, coeff_count)
+        ref_filter = FIRFilter(ref_coeffs)
+        manual_filter = FIRFilter(ref_coeffs)  # Same design as reference
+        manual_mode = True
+    except Exception as e:
+        update_status_text(f"Failed to create filter: {e}")
+        return
+
+    # Start the data stream again
+    if start_data_stream(selected_file, g_selected_window, coeff_count):
+        g_base_filename = os.path.basename(selected_file)
+        refresh_available_windows()
+        g_plot_running = False
+        update_bandwidth_summary()
+        update_delay_display()
+        # Start plotting after a short delay
+        g_root.after(500, lambda: start_plot() if not g_plot_running else None)
+    else:
+        update_status_text(f"Failed to open file: {selected_file}")
 
 def on_filtered_only_toggled():
     update_display_mode()
-    update_filter_summary()
+    update_bandwidth_summary()
+    update_delay_display()
     restart_animation()
 
 def start_plot():
@@ -817,7 +895,8 @@ def start_plot():
     if g_filtered_only_var is not None:
         g_filtered_only_var.set(False)
     update_display_mode()
-    update_filter_summary()
+    update_bandwidth_summary()
+    update_delay_display()
     restart_animation()
 
 def start_filtered_plot():
@@ -826,7 +905,8 @@ def start_filtered_plot():
     if g_filtered_only_var is not None:
         g_filtered_only_var.set(True)
     update_display_mode()
-    update_filter_summary()
+    update_bandwidth_summary()
+    update_delay_display()
     restart_animation()
 
 def clear_manual_coeffs():
@@ -837,7 +917,8 @@ def clear_manual_coeffs():
         manual_filtered_buffer.clear()
     update_plot_titles()
     update_display_mode()
-    update_filter_summary()
+    update_bandwidth_summary()
+    update_delay_display()
     restart_animation()
 
 def reload_filtered_and_restart():
@@ -877,17 +958,25 @@ def on_file_selected(_event):
         if g_window_var is not None:
             g_window_var.set(g_selected_window)
         refresh_available_windows()
-        # Start plotting
+        # Always restart from beginning — reset plot running flag
+        g_plot_running = False
+        update_bandwidth_summary()
+        update_delay_display()
+        # Start plotting after a short delay to let buffer fill
         g_root.after(500, lambda: start_plot() if not g_plot_running else None)
     else:
         update_status_text(f"Failed to open file: {selected_file}")
 
 def on_window_selected(_event):
-    global g_selected_window  # FIXED: Added global declaration
+    global g_selected_window, manual_filter, manual_mode
     selected_window = g_window_var.get().strip()
     if selected_window:
         g_selected_window = selected_window  # FIXED: Direct assignment
-        reload_filtered_and_restart()
+        # Reset manual filter because it's tied to the window method
+        manual_filter = None
+        manual_mode = False
+        # Treat this the same as a file re-selection: full restart
+        on_file_selected(None)
 
 def on_speed_selected(_event):
     selected_speed = g_speed_var.get().strip()
@@ -913,7 +1002,7 @@ def refresh_available_windows():
                 break
 
 def main():
-    global g_root, g_status_var, g_bandwidth_var, g_file_var, g_window_var, g_speed_var, g_available_files
+    global g_root, g_status_var, g_bandwidth_var, g_delay_var, g_file_var, g_window_var, g_speed_var, g_available_files
     global g_plot_running
     
     g_available_files = list_available_input_files()
@@ -943,6 +1032,7 @@ def main():
 
     g_status_var = tk.StringVar(value="Loading...")
     g_bandwidth_var = tk.StringVar(value="Bandwidths loading...")
+    g_delay_var = tk.StringVar(value="Group Delay: —")
     g_file_var = tk.StringVar(value=initial_file)
     g_window_var = tk.StringVar(value=g_selected_window)  # Initial value: "rectangular"
     g_speed_var = tk.StringVar(value=f"{g_interval_ms}ms")
@@ -952,7 +1042,7 @@ def main():
         g_base_filename = os.path.basename(initial_file)
         # g_window_var already set above
     
-    # Initialize plot (builds GUI) - NOW SAFE BECAUSE init_plot IS DEFINED
+    # Initialize plot (builds GUI)
     init_plot()
     
     # Now that GUI is built, refresh window methods combobox
@@ -967,7 +1057,8 @@ def main():
 
     # Initial UI update
     update_display_mode()
-    update_filter_summary()
+    update_bandwidth_summary()
+    update_delay_display()
 
     # Start the plot after 500ms to let buffer fill
     g_root.after(500, start_plot)
