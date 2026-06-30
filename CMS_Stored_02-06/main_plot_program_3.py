@@ -32,7 +32,7 @@ WINDOW_METHODS = [
     "frequency_sampling",
     "least_squares",
 ]
-SPEED_OPTIONS = ["5ms", "10ms", "20ms", "50ms", "100ms"]
+SPEED_OPTIONS = ["5ms", "10ms", "20ms", "50ms", "100ms", "500ms", "1000ms"]
 DEFAULT_COEFF_COUNT = 11
 CUTOFF_FREQ_HZ = 10.0
 SAMPLING_FREQ_HZ = 50.0
@@ -82,6 +82,9 @@ raw_buffer = deque(maxlen=PLOT_WINDOW_SIZE)
 ref_filtered_buffer = deque(maxlen=PLOT_WINDOW_SIZE)   # Reference filter (selected window method)
 manual_filtered_buffer = deque(maxlen=PLOT_WINDOW_SIZE)  # Manual FIR filter (if enabled)
 data_lock = threading.Lock()
+
+# Sample counter for total samples processed
+total_samples_processed = 0
 
 # Filter objects
 ref_filter = None
@@ -201,7 +204,7 @@ def generate_window_coefficients(window_method, num_taps):
 def start_data_stream(filename, window_method, coeff_count):
     """Start background thread to read file and apply filters in REAL-TIME with 20ms/sample timing + FIR overhead."""
     global stream_thread, stop_thread, stream_started, ref_filter, manual_filter, manual_mode
-    global raw_buffer, ref_filtered_buffer, manual_filtered_buffer
+    global raw_buffer, ref_filtered_buffer, manual_filtered_buffer, total_samples_processed
     
     # Stop any existing stream
     stop_data_stream()
@@ -211,6 +214,9 @@ def start_data_stream(filename, window_method, coeff_count):
         raw_buffer.clear()
         ref_filtered_buffer.clear()
         manual_filtered_buffer.clear()
+    
+    # Reset sample counter
+    total_samples_processed = 0
     
     # Reset flags
     stop_thread = False
@@ -250,6 +256,7 @@ def start_data_stream(filename, window_method, coeff_count):
     # START REAL-TIME PROCESSING THREAD
     def stream_worker():
         """This thread simulates LIVE load cell data: reads 1 sample every 20ms (50Hz) + FIR compute overhead"""
+        global total_samples_processed
         try:
             with open(filepath, 'r') as f:
                 # Process file LINE BY LINE as if it's streaming from a real load cell
@@ -290,11 +297,8 @@ def start_data_stream(filename, window_method, coeff_count):
                                 # NOTE: When manual mode is OFF, we don't touch manual buffer
                                 # (it will show last valid manual filter output or be empty)
                             
-                        except ValueError:
-                            continue  # Skip invalid lines
-                    
-                    # 3. SIMULATE REAL-TIME TIMING: base 20ms/sample + extra per-tap overhead
-                    # More coefficients)
+                            # INCREMENT SAMPLE COUNTER
+                            total_samples_processed += 1
                             
                         except ValueError:
                             continue  # Skip invalid lines
@@ -319,12 +323,13 @@ def start_data_stream(filename, window_method, coeff_count):
 
 def stop_data_stream():
     """Stop the background streaming thread."""
-    global stream_thread, stop_thread, stream_started
+    global stream_thread, stop_thread, stream_started, total_samples_processed
     stop_thread = True
     if stream_thread is not None and stream_thread.is_alive():
         stream_thread.join(timeout=1.0)
     stream_thread = None
     stream_started = False
+    total_samples_processed = 0  # Reset counter when stopping
 
 def has_manual_output():
     return manual_mode and manual_filter is not None and len(manual_filtered_buffer) > 0
@@ -398,13 +403,15 @@ def update_delay_display():
     )
 
 def update_status_text(prefix=None):
-    base = f"File: {g_base_filename} | Window: {g_selected_window} | Speed: {g_interval_ms} ms"
+    """Update the status label with current information."""
+    base = f"File: {g_base_filename} | Window: {g_selected_window} | Speed: {g_interval_ms} ms | Samples: {total_samples_processed}"
     if has_manual_output():
         coeffs_len = len(manual_filter.coeffs) if manual_filter else 0
         base += f" | Manual coeffs ON ({coeffs_len} taps)"
     if prefix:
-        return f"{prefix} | {base}"
-    return base
+        g_status_var.set(f"{prefix} | {base}")
+    else:
+        g_status_var.set(base)
 
 def update_display_mode():
     if axes is None:
@@ -814,21 +821,6 @@ def update_frame(frame_index):
             axes[1].set_title(f"FIR Filtered Data - {os.path.basename(g_base_filename)}\n"
                               f"Group Delay: {(n-1)/2.0:.1f} samples",
                               fontsize=12, weight="bold", color="#243043")
-        
-        # Update raw data axes limits (MISSING IN ORIGINAL CODE)
-        if raw_data:
-            raw_line.set_data(np.arange(len(raw_data)), raw_data)
-            axes[0].set_xlim(0, max(len(raw_data) - 1, 1))
-            # Adjust Y-axis for raw data plot
-            y_min = np.nanmin(raw_data)
-            y_max = np.nanmax(raw_data)
-            span = y_max - y_min
-            pad = max(span * 0.12, 0.1)
-            axes[0].set_ylim(y_min - pad, y_max + pad)
-        else:
-            raw_line.set_data([], [])
-            axes[0].set_xlim(0, PLOT_WINDOW_SIZE)
-            axes[0].set_ylim(0, 1)  # Fallback for no data
     else:
         # Show both reference and manual (if active)
         # Reference line
@@ -872,6 +864,11 @@ def update_frame(frame_index):
                               fontsize=12, weight="bold", color="#243043")
     
     axes[1].legend(loc="upper right", frameon=True, facecolor="white")
+    
+    # UPDATE STATUS INFORMATION IN REAL-TIME
+    update_bandwidth_summary()
+    update_delay_display()
+    update_status_text()  # This will update the sample count in the status
     
     return raw_line, filtered_line, manual_filtered_line
 
@@ -1118,11 +1115,13 @@ def main():
     g_manual_mode = False
     g_filtered_data = np.array([])
     g_plot_running = False
+    total_samples_processed = 0  # Reset sample counter
 
     # Initial UI update
     update_display_mode()
     update_bandwidth_summary()
     update_delay_display()
+    update_status_text()
 
     # Start the plot after 500ms to let buffer fill
     g_root.after(500, start_plot)

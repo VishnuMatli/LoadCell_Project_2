@@ -32,7 +32,7 @@ WINDOW_METHODS = [
     "frequency_sampling",
     "least_squares",
 ]
-SPEED_OPTIONS = ["5ms", "10ms", "20ms", "50ms", "100ms"]
+SPEED_OPTIONS = ["5ms", "10ms", "20ms", "50ms", "100ms", "500ms", "1000ms"]
 DEFAULT_COEFF_COUNT = 11
 CUTOFF_FREQ_HZ = 10.0
 SAMPLING_FREQ_HZ = 50.0
@@ -82,6 +82,9 @@ raw_buffer = deque(maxlen=PLOT_WINDOW_SIZE)
 ref_filtered_buffer = deque(maxlen=PLOT_WINDOW_SIZE)   # Reference filter (selected window method)
 manual_filtered_buffer = deque(maxlen=PLOT_WINDOW_SIZE)  # Manual FIR filter (if enabled)
 data_lock = threading.Lock()
+
+# Sample counter for total samples processed
+total_samples_processed = 0
 
 # Filter objects
 ref_filter = None
@@ -201,7 +204,7 @@ def generate_window_coefficients(window_method, num_taps):
 def start_data_stream(filename, window_method, coeff_count):
     """Start background thread to read file and apply filters in REAL-TIME with 20ms/sample timing + FIR overhead."""
     global stream_thread, stop_thread, stream_started, ref_filter, manual_filter, manual_mode
-    global raw_buffer, ref_filtered_buffer, manual_filtered_buffer
+    global raw_buffer, ref_filtered_buffer, manual_filtered_buffer, total_samples_processed
     
     # Stop any existing stream
     stop_data_stream()
@@ -211,6 +214,7 @@ def start_data_stream(filename, window_method, coeff_count):
         raw_buffer.clear()
         ref_filtered_buffer.clear()
         manual_filtered_buffer.clear()
+        total_samples_processed = 0
     
     # Reset flags
     stop_thread = False
@@ -218,7 +222,9 @@ def start_data_stream(filename, window_method, coeff_count):
     
     # Create filters ONCE at startup (not per sample)
     try:
-        ref_coeffs = generate_window_coefficients(window_method, coeff_count)
+        # Ensure at least 2 coefficients
+        safe_coeff_count = max(2, coeff_count)
+        ref_coeffs = generate_window_coefficients(window_method, safe_coeff_count)
         ref_filter = FIRFilter(ref_coeffs)  # Reference filter (selected window method)
         manual_filter = None  # Will be created when user applies manual coeffs
         manual_mode = False
@@ -247,7 +253,9 @@ def start_data_stream(filename, window_method, coeff_count):
     
     # START REAL-TIME PROCESSING THREAD
     def stream_worker():
-        """This thread simulates LIVE load cell data: reads 1 sample every 20ms (50Hz) + FIR compute overhead"""
+        """This thread simulates LIVE load cell data: reads 1 sample at the user-selected
+        interval (g_interval_ms) + extra per-tap overhead to simulate FIR compute cost."""
+        global total_samples_processed
         try:
             with open(filepath, 'r') as f:
                 # Process file LINE BY LINE as if it's streaming from a real load cell
@@ -273,6 +281,7 @@ def start_data_stream(filename, window_method, coeff_count):
                             # PATH 1: RAW DATA (unfiltered weight for raw plot)
                             with data_lock:
                                 raw_buffer.append(weight_analog)  # Send directly to raw plot
+                                total_samples_processed += 1
                             
                             # PATH 2: FILTERED DATA (weight → FIR filter → filtered plot)
                             with data_lock:
@@ -291,11 +300,13 @@ def start_data_stream(filename, window_method, coeff_count):
                         except ValueError:
                             continue  # Skip invalid lines
                     
-                    # 3. SIMULATE REAL-TIME TIMING: base 20ms/sample + extra per-tap overhead
-                    # More coefficients = more multiply-accumulate work → perceptibly slower stream
+                    # 3. REAL-TIME TIMING: driven by the user-selected Plot Speed (g_interval_ms)
+                    # plus extra per-tap overhead to simulate FIR multiply-accumulate cost.
+                    # More taps = more compute = slower stream. Higher selected interval = slower stream.
                     n_taps = len(ref_filter.coeffs) if ref_filter is not None else 1
-                    # Base 20ms for 50Hz rate + 0.15ms per tap to simulate FIR compute cost
-                    sample_delay = 0.02 + max(0, (n_taps - 1)) * 0.00015
+                    base_delay_s = g_interval_ms / 1000.0
+                    tap_overhead_s = max(0, (n_taps - 1)) * 0.00015
+                    sample_delay = base_delay_s + tap_overhead_s
                     time.sleep(sample_delay)
                     
         except Exception as e:
@@ -340,7 +351,12 @@ def is_filtered_only_mode():
     return bool(g_filtered_only_var.get()) if g_filtered_only_var is not None else False
 
 def update_bandwidth_summary():
-    """Update the bandwidth summary label in the stats frame."""
+    """Update the bandwidth summary label in the stats frame.
+    
+    Bandwidth is recalculated from the live buffer contents (amplitude span),
+    and additionally reports the effective sample rate, which changes with both
+    the selected Plot Speed (g_interval_ms) and the FIR tap count (more taps =
+    more compute overhead per sample = lower effective sample rate)."""
     if g_bandwidth_var is None:
         return
     raw_len, ref_len, man_len = get_buffer_lengths()
@@ -354,21 +370,29 @@ def update_bandwidth_summary():
     
     display_bw = man_bw if has_manual_output() else ref_bw
     
+    # Effective sample rate: depends on selected speed (g_interval_ms) AND tap count
+    active_filter = manual_filter if has_manual_output() else ref_filter
+    n_taps = len(active_filter.coeffs) if active_filter is not None else 0
+    sample_period_ms = g_interval_ms + max(0, n_taps - 1) * 0.15
+    effective_hz = 1000.0 / sample_period_ms if sample_period_ms > 0 else 0.0
+    
+    rate_info = f"Rate: {effective_hz:.1f} Hz (N={n_taps})"
+    
     if is_filtered_only_mode():
         if has_manual_output():
             g_bandwidth_var.set(
-                f"Filtered bandwidth: {display_bw:.2f}    |    Manual taps: {len(manual_filter.coeffs) if manual_filter else 0}"
+                f"Filtered bandwidth: {display_bw:.2f}    |    Manual taps: {n_taps}    |    {rate_info}"
             )
         else:
-            g_bandwidth_var.set(f"Filtered bandwidth: {display_bw:.2f}")
+            g_bandwidth_var.set(f"Filtered bandwidth: {display_bw:.2f}    |    {rate_info}")
     else:
         if has_manual_output():
             g_bandwidth_var.set(
-                f"Raw bandwidth: {raw_bw:.2f}    |    Reference: {ref_bw:.2f}    |    Manual: {display_bw:.2f}"
+                f"Raw bandwidth: {raw_bw:.2f}    |    Reference: {ref_bw:.2f}    |    Manual: {display_bw:.2f}    |    {rate_info}"
             )
         else:
             g_bandwidth_var.set(
-                f"Raw bandwidth: {raw_bw:.2f}    |    Filtered bandwidth: {display_bw:.2f}"
+                f"Raw bandwidth: {raw_bw:.2f}    |    Filtered bandwidth: {display_bw:.2f}    |    {rate_info}"
             )
 
 def update_delay_display():
@@ -381,8 +405,8 @@ def update_delay_display():
         return
     n_taps = len(active_filter.coeffs)
     group_delay_samples = (n_taps - 1) / 2.0
-    # Each sample is at 20ms base rate + tap overhead
-    sample_period_ms = 20.0 + max(0, n_taps - 1) * 0.15
+    # Sample period depends on the user-selected Plot Speed + tap overhead
+    sample_period_ms = g_interval_ms + max(0, n_taps - 1) * 0.15
     group_delay_ms = group_delay_samples * sample_period_ms
     g_delay_var.set(
         f"Group Delay: {group_delay_samples:.1f} samples  ≈  {group_delay_ms:.1f} ms  "
@@ -441,7 +465,7 @@ def update_display_mode():
         filtered_line.set_visible(True)
         manual_filtered_line.set_visible(True)
         filtered_line.set_color("#7d8794")
-        filtered_line.set_linestyle("--")
+        filtered_line.set_linestyle("-")
         filtered_line.set_linewidth(1.4)
         filtered_line.set_label("Reference Filtered")
         manual_filtered_line.set_color("#1f6feb")
@@ -523,7 +547,7 @@ def init_plot():
     axes[1].set_title("FIR Filtered Data", fontsize=12, weight="bold", color="#243043")
     axes[1].set_xlabel("Sample Index", color="#243043")
     axes[1].set_ylabel("Weight", color="#243043")
-    axes[1].legend(loc="upper right", frameon=True, facecolor="white")
+    axes[1].legend(loc="upper right", facecolor="white")
 
     g_raw_axes_pos = axes[0].get_position().frozen()
     g_filtered_axes_pos = axes[1].get_position().frozen()
@@ -678,9 +702,6 @@ def init_plot():
     action_panel = tk.Frame(sidebar_inner, bg="#1f2d3d")
     action_panel.pack(fill=tk.X, padx=14, pady=(6, 10))
 
-    def colored_button(text, color, command):
-        return tk.Label(action_panel, text="Coefficient Control", bg="#1f2d3d", fg="#bcd0ea", font=("TkDefaultFont", 9, "bold")).pack(anchor="w", pady=(2,0))
-
     def on_coeff_count_changed(*_args):
         """Restart stream and plot from scratch whenever the coefficient count changes."""
         selected_file = g_file_var.get().strip()
@@ -742,7 +763,7 @@ def init_plot():
     speed_combo.bind("<<ComboboxSelected>>", on_speed_selected)
 
 def update_frame(frame_index):
-    """Called by FuncAnimation for each frame - PLOTS CURRENT BUFFER CONTENTS"""
+    """Called by FuncAnimation for each frame - PLOTS CURRENT BUFFER CONTENTS WITH PROPER LIMITS"""
     filtered_only = is_filtered_only_mode()
     
     # Get current data (thread-safe snapshot)
@@ -750,14 +771,82 @@ def update_frame(frame_index):
         raw_data = list(raw_buffer)
         ref_data = list(ref_filtered_buffer)
         man_data = list(manual_filtered_buffer)
+        total_count = total_samples_processed
     
-    # Update raw data plot (top axis)
-    if filtered_only:
-        raw_line.set_data([], [])  # Hide raw data in filtered-only mode
+    # X-axis values: show the TRUE cumulative sample index (increasing), not the
+    # local 0..len(buffer) index. Since the buffers are fixed-length (oscilloscope
+    # rolling window), the oldest sample in the buffer corresponds to
+    # (total_count - len(buffer)) and the newest to (total_count - 1).
+    def sample_x_axis(data_len):
+        start = max(0, total_count - data_len)
+        return np.arange(start, start + data_len)
+    
+    # --- RAW DATA AXIS (axes[0]) ---
+    if raw_data:
+        x_raw = sample_x_axis(len(raw_data))
+        raw_line.set_data(x_raw, raw_data)
+        axes[0].set_xlim(x_raw[0], max(x_raw[-1], x_raw[0] + 1))
+        # Adjust Y-axis for raw data plot
+        y_min = np.nanmin(raw_data)
+        y_max = np.nanmax(raw_data)
+        span = y_max - y_min
+        pad = max(span * 0.12, 0.1)
+        axes[0].set_ylim(y_min - pad, y_max + pad)
     else:
+        raw_line.set_data([], [])
+        axes[0].set_xlim(0, PLOT_WINDOW_SIZE)
+        axes[0].set_ylim(0, 1)  # Fallback for no data
+    
+    # --- FILTERED DATA AXIS (axes[1]) ---
+    if filtered_only:
+        # Show only filtered data (reference or manual)
+        if has_manual_output() and len(man_data) > 0:
+            plot_data = man_data
+            label = "Manual FIR Output"
+        elif len(ref_data) > 0:
+            plot_data = ref_data
+            label = "FIR Filtered Data"
+        else:
+            plot_data = []
+            label = ""
+        
+        if plot_data:
+            x_filt = sample_x_axis(len(plot_data))
+            filtered_line.set_data(x_filt, plot_data)
+            axes[1].set_xlim(x_filt[0], max(x_filt[-1], x_filt[0] + 1))
+            # Adjust Y-axis for filtered data plot
+            y_min = np.nanmin(plot_data)
+            y_max = np.nanmax(plot_data)
+            span = y_max - y_min
+            pad = max(span * 0.12, 0.1)
+            axes[1].set_ylim(y_min - pad, y_max + pad)
+        else:
+            filtered_line.set_data([], [])
+            axes[1].set_xlim(0, PLOT_WINDOW_SIZE)
+            axes[1].set_ylim(0, 1)  # Fallback
+        
+        # Hide manual line in filtered-only mode
+        manual_filtered_line.set_data([], [])
+        manual_filtered_line.set_visible(False)
+        
+        # Set titles
+        axes[0].set_title(f"Raw ADC Data - {os.path.basename(g_base_filename)}", fontsize=12, weight="bold", color="#243043")
+        if has_manual_output():
+            n = len(manual_filter.coeffs)
+            axes[1].set_title(f"Manual FIR Output - {os.path.basename(g_base_filename)}\n"
+                              f"Group Delay: {(n-1)/2.0:.1f} samples", 
+                              fontsize=12, weight="bold", color="#243043")
+        else:
+            n = len(ref_filter.coeffs) if ref_filter is not None else 0
+            axes[1].set_title(f"FIR Filtered Data - {os.path.basename(g_base_filename)}\n"
+                              f"Group Delay: {(n-1)/2.0:.1f} samples",
+                              fontsize=12, weight="bold", color="#243043")
+        
+        # Update raw data axes limits (also needed in filtered-only mode for consistency)
         if raw_data:
-            raw_line.set_data(np.arange(len(raw_data)), raw_data)
-            axes[0].set_xlim(0, max(len(raw_data) - 1, 1))
+            x_raw2 = sample_x_axis(len(raw_data))
+            raw_line.set_data(x_raw2, raw_data)
+            axes[0].set_xlim(x_raw2[0], max(x_raw2[-1], x_raw2[0] + 1))
             # Adjust Y-axis for raw data plot
             y_min = np.nanmin(raw_data)
             y_max = np.nanmax(raw_data)
@@ -768,35 +857,21 @@ def update_frame(frame_index):
             raw_line.set_data([], [])
             axes[0].set_xlim(0, PLOT_WINDOW_SIZE)
             axes[0].set_ylim(0, 1)  # Fallback for no data
-    
-    # Update filtered data plot (bottom axis)
-    if filtered_only:
-        # Show only filtered data (reference or manual)
-        if has_manual_output() and len(man_data) > 0:
-            filtered_line.set_data(np.arange(len(man_data)), man_data)
-            manual_filtered_line.set_data([], [])
-            manual_filtered_line.set_visible(False)
-            label = "Manual FIR Output"
-        elif len(ref_data) > 0:
-            filtered_line.set_data(np.arange(len(ref_data)), ref_data)
-            manual_filtered_line.set_data([], [])
-            manual_filtered_line.set_visible(False)
-            label = "FIR Filtered Data"
-        else:
-            filtered_line.set_data([], [])
-            manual_filtered_line.set_data([], [])
-            manual_filtered_line.set_visible(False)
-            axes[1].set_ylim(0, 1)  # Fallback
     else:
         # Show both reference and manual (if active)
-        if len(ref_data) > 0:
-            filtered_line.set_data(np.arange(len(ref_data)), ref_data)
+        # Reference line
+        if ref_data:
+            x_ref = sample_x_axis(len(ref_data))
+            filtered_line.set_data(x_ref, ref_data)
+            axes[1].set_xlim(x_ref[0], max(x_ref[-1], x_ref[0] + 1))
         else:
             filtered_line.set_data([], [])
             axes[1].set_xlim(0, PLOT_WINDOW_SIZE)
         
-        if has_manual_output() and len(man_data) > 0:
-            manual_filtered_line.set_data(np.arange(len(man_data)), man_data)
+        # Manual line
+        if has_manual_output() and man_data:
+            x_man = sample_x_axis(len(man_data))
+            manual_filtered_line.set_data(x_man, man_data)
             manual_filtered_line.set_visible(True)
         else:
             manual_filtered_line.set_data([], [])
@@ -804,7 +879,7 @@ def update_frame(frame_index):
         
         # Adjust Y-axis for filtered data plot (consider both signals if manual active)
         all_data = ref_data + (man_data if has_manual_output() else [])
-        if len(all_data) > 0:
+        if all_data:
             y_min = np.nanmin(all_data)
             y_max = np.nanmax(all_data)
             span = y_max - y_min
@@ -812,10 +887,25 @@ def update_frame(frame_index):
             axes[1].set_ylim(y_min - pad, y_max + pad)
         else:
             axes[1].set_ylim(0, 1)  # Fallback
+        
+        # Set titles
+        axes[0].set_title(f"Raw ADC Data - {os.path.basename(g_base_filename)}", fontsize=12, weight="bold", color="#243043")
+        if has_manual_output():
+            n = len(manual_filter.coeffs)
+            axes[1].set_title(f"Manual FIR Filtered Data vs Reference - {os.path.basename(g_base_filename)}\n"
+                              f"Group Delay: {(n-1)/2.0:.1f} samples", 
+                              fontsize=12, weight="bold", color="#243043")
+        else:
+            n = len(ref_filter.coeffs) if ref_filter is not None else 0
+            axes[1].set_title(f"FIR Filtered Data - {os.path.basename(g_base_filename)}\n"
+                              f"Group Delay: {(n-1)/2.0:.1f} samples", 
+                              fontsize=12, weight="bold", color="#243043")
     
-    # Update titles (shows group delay)
-    update_plot_titles()
     axes[1].legend(loc="upper right", frameon=True, facecolor="white")
+    
+    # Keep bandwidth + delay readouts live, updating every frame as data/speed/taps change
+    update_bandwidth_summary()
+    update_delay_display()
     
     return raw_line, filtered_line, manual_filtered_line
 
@@ -836,6 +926,7 @@ def restart_animation():
         interval=g_interval_ms,
         blit=False,
         repeat=True,  # Critical: run indefinitely
+        cache_frame_data=False   # Fix for warning about unbounded cache
     )
     if g_canvas is not None:
         g_canvas.draw_idle()
@@ -852,6 +943,9 @@ def apply_manual_coeffs_from_controls():
         update_status_text("Invalid coefficient count")
         return
 
+    # Ensure at least 2 coefficients
+    safe_coeff_count = max(2, coeff_count)
+
     # Stop any existing stream
     stop_data_stream()
     
@@ -863,7 +957,7 @@ def apply_manual_coeffs_from_controls():
     
     # Create filters with the current window method and new coefficient count
     try:
-        ref_coeffs = generate_window_coefficients(g_selected_window, coeff_count)
+        ref_coeffs = generate_window_coefficients(g_selected_window, safe_coeff_count)
         ref_filter = FIRFilter(ref_coeffs)
         manual_filter = FIRFilter(ref_coeffs)  # Same design as reference
         manual_mode = True
@@ -872,7 +966,7 @@ def apply_manual_coeffs_from_controls():
         return
 
     # Start the data stream again
-    if start_data_stream(selected_file, g_selected_window, coeff_count):
+    if start_data_stream(selected_file, g_selected_window, safe_coeff_count):
         g_base_filename = os.path.basename(selected_file)
         refresh_available_windows()
         g_plot_running = False
@@ -897,6 +991,7 @@ def start_plot():
     update_display_mode()
     update_bandwidth_summary()
     update_delay_display()
+    update_status_text()
     restart_animation()
 
 def start_filtered_plot():
@@ -907,6 +1002,7 @@ def start_filtered_plot():
     update_display_mode()
     update_bandwidth_summary()
     update_delay_display()
+    update_status_text()
     restart_animation()
 
 def clear_manual_coeffs():
@@ -916,7 +1012,6 @@ def clear_manual_coeffs():
     with data_lock:
         manual_filtered_buffer.clear()
     update_plot_titles()
-    update_display_mode()
     update_bandwidth_summary()
     update_delay_display()
     restart_animation()
@@ -952,7 +1047,10 @@ def on_file_selected(_event):
     window_method = g_window_var.get().strip() if g_window_var else g_selected_window
     coeff_count = int(g_coeff_count_var.get().strip()) if g_coeff_count_var else DEFAULT_COEFF_COUNT
     
-    if start_data_stream(selected_file, window_method, coeff_count):
+    # Ensure at least 2 coefficients
+    safe_coeff_count = max(2, coeff_count)
+    
+    if start_data_stream(selected_file, window_method, safe_coeff_count):
         g_base_filename = os.path.basename(selected_file)
         g_selected_window = window_method
         if g_window_var is not None:
@@ -981,12 +1079,26 @@ def on_window_selected(_event):
 def on_speed_selected(_event):
     selected_speed = g_speed_var.get().strip()
     if selected_speed.endswith("ms"):
-        global g_interval_ms
+        global g_interval_ms, g_plot_running
         g_interval_ms = int(selected_speed[:-2])
+        # The running stream worker reads g_interval_ms live each loop, so the
+        # sample-read rate updates immediately without needing a restart.
+        # Restart the animation timer interval and the plot view (from the beginning)
+        # so the change is clearly visible, consistent with other settings changes.
         if g_animation and g_animation.event_source:
             g_animation.event_source.interval = g_interval_ms
         update_status_text()
-        restart_animation()
+        update_bandwidth_summary()
+        update_delay_display()
+        selected_file = g_file_var.get().strip()
+        if selected_file:
+            coeff_count = int(g_coeff_count_var.get().strip()) if g_coeff_count_var else DEFAULT_COEFF_COUNT
+            safe_coeff_count = max(2, coeff_count)
+            if start_data_stream(selected_file, g_selected_window, safe_coeff_count):
+                g_plot_running = False
+                g_root.after(300, lambda: start_plot() if not g_plot_running else None)
+        else:
+            restart_animation()
 
 def refresh_available_windows():
     global g_available_windows
