@@ -1,0 +1,1816 @@
+Engineering Applications of Artificial Intelligence 135 (2024) 108685
+
+Contents lists available at ScienceDirect
+
+Engineering Applications of Artificial Intelligence
+journal homepage: www.elsevier.com/locate/engappai
+
+Research paper
+
+A denoising autoencoder based on U-Net and bidirectional long short-term
+memory for multi-level random telegraph signal analysis
+Bowen Deng a,b , HeeBong Yang a,b,c , Na Young Kim a,b,c,d ,∗
+a Department of Electrical and Computer Engineering, University of Waterloo, 200 University Ave. West, Waterloo, N2L 3G1, Ontario, Canada
+b
+
+Institute for Quantum Computing, University of Waterloo, 200 University Ave. West, Waterloo, N2L 3G1, Ontario, Canada
+Waterloo Institute for Nanotechnology, University of Waterloo, 200 University Ave. West, Waterloo, N2L 3G1, Ontario, Canada
+d
+Department of Chemistry, University of Waterloo, 200 University Ave. West, Waterloo, N2L 3G1, Ontario, Canada
+c
+
+ARTICLE
+
+INFO
+
+Keywords:
+Random telegraph signals
+Signal denoising
+Denoising autoencoder
+Deep learning
+Signal processing
+
+ABSTRACT
+Random telegraph signals (RTSs) are specific time-fluctuating signal patterns marked by a series of distinctive
+switching events between well-defined signal levels. These signals are ubiquitous in many electronic, chemical,
+and biological devices and systems. Analyzing RTSs unveils associated system structures and internal operation
+mechanisms, offering valuable insights into performance sensitivity. Therefore, accurate parameter quantification of RTSs is essential for understanding their origin and significance. While two-level RTS analysis is
+straightforward, complications arise at multiple levels, especially with unwanted background fluctuations. To
+address this challenge, we developed a novel denoising autoencoder model with U-Net and bidirectional long
+short-term memory (DAE UBL) for denoising multi-level RTSs degraded by Gaussian white and pink noise.
+DAE UBL extracts lower-dimensional latent features with its encoder and reconstructs denoised RTS with its
+decoder. Trained and validated with large datasets of noisy multi-level RTSs, our DAE UBL demonstrates
+superior and stable denoising performance compared to four classic models with lower average median root
+mean squared errors by over 78% and 63% for all RTS data accompanying various strengths of white noise
+and pink noise. Average median signal-to-noise ratios in the DAE UBL analysis are increased by over 65%
+and 56% for the white noise and pink noise datasets. In the time domain, DAE UBL effectively suppresses
+both local and global fluctuations, thereby successfully removing background noise. Our model exhibits robust
+performance in denoising multi-level RTSs with strong pink noise. We envision that our DAE UBL will be an
+attractive denoising methodology for the complex multi-level RTS analysis.
+
+1. Introduction
+Random telegraph signals (RTSs) refer to observable digitized switching events that occur randomly between two fixed levels (Yuzhelevski
+et al., 2000). These telegraphic signals are notably prominent and
+directly related to performance sensitivity and reliability in various
+places such as nanoscale electronic devices (Yang et al., 2022; Hung
+et al., 1990), quantum devices (Kenfack et al., 2017; Kleinherbers
+et al., 2022), photodetector image sensors (Lucas et al., 2022), and
+biological systems of human breast cancer cells (Ribeiro et al., 2020).
+The simplest form of RTSs involves two specific levels, where rapid
+stochastic jumps happen between low and high levels separated by the
+transition amplitude 𝛥RTS . In the time domain, between the jumps, 𝜏high
+and 𝜏low are defined to represent individual dwell times at the high level
+and low level, respectively. Fig. 1 presents a part of two-level RTS trace
+
+in time domain with three RTS parameters. For the whole time trace,
+the histograms of 𝜏high and 𝜏low follow a Poisson distribution, yielding
+the average values of two-time constants denoted as 𝜏̄high and 𝜏̄low as a
+manifestation of a memoryless property (Theodorsen et al., 2017).
+Complex RTSs in real systems emerge from random switching
+among more than two distinct levels, which indicates that there are
+several two-level entities inside the systems (Goiffon et al., 2009;
+Nagumo et al., 2010a; Awano et al., 2013). When multiple entities
+may exist mutually exclusive, the RTS is referred to as normal RTS
+(nRTS), resulting from the linear superposition of each two-level RTS,
+which is characterized by its own parameters of 𝛥RTS , 𝜏̄high and 𝜏̄low .
+However, if any correlations among the levels in different entities may
+govern the complex dynamics, the resulting RTSs called anomalous
+RTS (aRTS) become rather complicated. It is required to bring physical
+
+∗ Corresponding author.
+
+E-mail address: nayoung.kim@uwaterloo.ca (N.Y. Kim).
+https://doi.org/10.1016/j.engappai.2024.108685
+Received 2 December 2023; Received in revised form 20 May 2024; Accepted 23 May 2024
+Available online 4 June 2024
+0952-1976/© 2024 The Author(s). Published by Elsevier Ltd. This is an open access article under the CC BY-NC license (http://creativecommons.org/licenses/bync/4.0/).
+
+Engineering Applications of Artificial Intelligence 135 (2024) 108685
+
+B. Deng et al.
+
+Abbreviations
+AE
+aRTS
+Bi-LSTM
+CNN
+CMOS
+cDAE
+DAE UBL
+DAE
+DWT
+EMD
+FFT
+FT
+fHMM
+GMM
+HMM
+IQR
+KDE
+nRTS
+MA
+MSE
+RMSE
+RTS
+SNR
+
+autoencoder
+anomalous random telegraph signal
+bidirectional long short-term memory
+convolutional neural networks
+complementary metal-oxide semiconductor
+convolutional denoising autoencoder
+denoising autoencoder model based on U-Net and
+bidirectional long short-term memory
+denoising autoencoder
+discrete wavelet transform
+empirical mode decomposition
+fast Fourier transform
+Fourier transform
+factorial hidden Markov model
+Gaussian mixture model
+hidden Markov model
+interquartile ranges
+kernel density estimation
+normal random telegraph signal
+moving average
+mean squared error
+root mean squared error
+random telegraph signal
+signal-to-noise ratio
+
+Fig. 1. Representative trace of a two-level random telegraph signal with the definition
+of three parameters.
+
+This is extended to build factorial HMMs (fHMMs) with high-rank
+matrices for the reconstruction of noisy multi-level RTSs (Puglisi and
+Pavan, 2013, 2014). Unfortunately, it is not straightforward to establish
+the fHMM for multi-level RTSs since the outcome is highly sensitive to
+the choice of initial values of matrix elements and there is no guideline
+on how to choose them. In order to efficiently and comprehensively
+analyze complex multi-level RTSs by avoiding any guess tasks, a threestep analysis protocol was reported based on several machine learning
+algorithms of kernel density estimation (KDE), Gaussian mixture model
+(GMM), and deep neural network models (Robitaille et al., 2023). Although this novel protocol has promising performance in reconstructing
+complex multi-level RTSs, they have limitations that the reconstruction
+process is complex and time-consuming. Furthermore, none of these
+approaches can comprehensively reconstruct all types of RTSs using
+a universal all-in-one model without necessitating specific parameter
+settings for each case.
+The previous three-step analysis protocol has primarily focused on
+parameter extractions and digitization in RTS reconstruction with a
+simple filtering method, lacking a robust denoising scheme to remove
+background noise. We emphasize that effective RTS denoising in the
+preprocessing step is absolutely crucial for achieving the successful
+reconstruction of pure RTS patterns. The MA filter, regarded as the
+simplest and easiest digital filter (Magsi et al., 2018), finds extensive
+application in 1D signal denoising (Pandey and Giri, 2016; Shan et al.,
+2022; Popovic et al., 2016; Sonali et al., 2013). In the context of
+RTS processing, MA serves as a time domain-based filtering technique,
+contributing to the enhancement of Lorentzian spectrum detection
+rates (Gauthier et al., 2022). In our previous work (Robitaille et al.,
+2023), we applied MA to uncover density peaks from background noise
+while performing KDE. The window size of MA was systematically
+scaled by calculating the estimation of background noise with the
+𝜎𝑛
+equation 𝐿 = floor(60⋅tan−1 ( 4𝜋𝑒𝑠𝑡 )), where 𝜎𝑛𝑒𝑠𝑡 is the standard deviation
+of the background noise. However, the MA filtering method inherently
+struggles to effectively manage signals with high background noise
+levels while preserving the sharpness of signal transition edges. And
+the MA method possesses a tendency to smooth and average out short
+𝜏-levels.
+Besides time domain-based methods, several frequency domainbased denoising techniques are developed in the signal processing
+fields. A Fourier transform (FT) (Nagumo et al., 2010b; Gao et al.,
+2012; Petrychuk et al., 2019) stands out as a prevalent method for
+RTS denoising and analysis; however, the FT denoising method seems
+most effective for processing RTSs only with low noise levels. A wavelet
+transform technique offers notable performance in denoising due to
+its multi-resolution analysis capabilities. For instance, a continuous
+
+insights of correlations in the reliable decomposition of two-level RTSs
+out of the aRTSs. For short-channel transistors, three specific types of
+aRTSs are identified (Zhang et al., 2018; Wang et al., 2018). Obviously,
+the quantification of aRTS parameters is more challenging than that of
+nRTS, and it also strongly depends on the specific type of aRTS.
+Moreover, actual signals in experiments are mixed with these RTSs
+and other background fluctuations, and some of which are modeled as
+Gaussian white noise (Hida et al., 2013; Hendrickson, 2019; Majumder,
+2011) and pink noise (Kogan, 1996; Bae et al., 2009; Ralls et al., 1984),
+depending on its spectral behavior. If the unwanted noise amplitude
+is smaller than that of RTS, classic denoising methods such as moving
+average (MA) can differentiate RTS from the raw signals relatively well.
+However, the background noise is noticeably stronger and a pink noise
+is present, the analysis of both two-level and multi-level RTSs becomes
+formidable, where a robust denoising technique is highly desirable.
+RTS reconstruction is the process of restoring a pure RTS from
+a raw noisy signal which combines the RTS with background noise.
+Various efforts have been made to mitigate the interference of background noise through the development of RTS reconstruction protocols.
+In 2009, Goiffon et al. introduced a reconstruction method based
+on convolutional filtering to detect and reconstruct multi-level RTSs
+in complementary metal-oxide semiconductor (CMOS) image sensors.
+They were able to obtain the distribution of maximum amplitude and
+the number of RTS levels from many pixels by reconstructing RTSs in
+the presence of comparatively weak white noise level only (Goiffon
+et al., 2009). Another approach is done in the frequency domain with
+a discrete wavelet transform (DWT) technique followed by a threshold
+extraction step on noisy RTSs from CMOS image sensors to reconstruct
+only one pure two-level RTS out of strong background white noise
+level (Hendrickson et al., 2020).
+Recent advancements in machine learning have given rise to several novel methods of RTS reconstruction. The hidden Markov model
+(HMM), a typical machine learning model, was applied to analyze noisy
+two-level RTSs by generating two matrices with rank 2 that represent
+the transition probabilities of two states (Li et al., 2013; Rabiner, 1989).
+2
+
+Engineering Applications of Artificial Intelligence 135 (2024) 108685
+
+B. Deng et al.
+
+wavelet transform with Haar basis was implemented to obtain the
+second-order wavelet coefficients of RTSs with pink noise (Principato
+and Ferrante, 2007). A DWT denoising with soft or hard thresholding
+was proposed by Hendrickson et al. for reconstructing dark current
+RTSs collected from CMOS devices (Hendrickson et al., 2020). While
+this DWT denoising method is capable of looking at the signal at
+different scales (Gilli, 1996), predefined wavelets may not perfectly decompose the signal, leading to level shifts of RTSs and bigger denoising
+errors.
+Data-driven models are aimed at finding connections between the
+system state variables (input, internal and output variables) without
+explicit knowledge of the physical behavior (Abrahart et al., 2008).
+There has also been an exploration of data-driven models in RTS
+denoising. A study conducted by Moshrefi et al. introduced an empirical
+mode decomposition (EMD) model for RTS denoising (Moshrefi et al.,
+2021). Although the EMD-based approach maintains decent denoising
+performance and with no dependency on a specific function, it can
+only analyze and denoise signals on a case-by-case basis, meaning that
+this method will take much longer to process large datasets than an
+all-in-one unified model.
+On the other hand, autoencoder (AE) (Leudar, 1989) based on deep
+learning (leCun Yann et al., 2015) was employed to overcome the
+aforementioned limitation by learning weights for denoising specific
+parameter settings of signals. AE consists of two parts: an encoder,
+which encodes the input data into a compressed latent space representation, and a decoder, which reconstructs the desired output result from
+the latent space representation. The denoising autoencoder (DAE) is a
+specific AE structure designed for signal denoising (Chiang et al., 2019;
+Grozdić et al., 2017; Fan et al., 2020). Hendrickson et al. introduced a
+DAE for dark current RTS denoising (Hendrickson, 2019). The model
+can automatically denoise RTSs with different amplitudes and level
+dwell times by training 90,000 RTSs, where its proven effectiveness has
+been limited to the extraction for a computationally less challenging
+class of two-level RTSs with white noise levels smaller than 40%.
+To the best of our knowledge, existing RTS denoising models lack
+the capabilities to effectively handle multi-level RTSs hampered by
+either strong white or pink noise as background, which makes the
+extraction of 𝛥RTS and 𝜏 much more challenging. The detailed discussions are given in Section 2.2. Furthermore, there is no attempt to
+build an all-in-one model to handle many RTS types at once. Hence,
+we have developed a novel DAE that is adaptable to a variety of
+multi-level RTS classes across a wide spectrum of background noise
+strengths, demonstrating superior performance in complex RTS analysis. The ultimate target is to apply our denoising model to real RTSs
+across various fields. We envision that our denoising model can serve
+as an end-to-end preprocessing method for analyzing complex multilevel RTSs in many applications, thereby advancing the development
+of nanoscale electronic devices, quantum computers, biosensors, and
+random number generators with high sensitivity. Section 2 explicitly
+introduces various types of RTSs and outlines the process of generating
+extensive datasets of RTSs for training and validating our DAE models,
+which are comprehensively explained in Section 3. The details of DAE
+architectures are elaborated upon two schemes of U-Net and bidirectional long short-term memory (Bi-LSTM). To quantify the performance
+of our DAE model, we generate large datasets to cover six distinct
+classes of RTSs with two background types of white noise and pink
+noise for training and validation, and their ground truth values are
+used to determine errors and the performance analysis is thoroughly
+discussed in Section 4. Finally, we will conclude in Section 5 by
+summarizing our work and discussing prospective work.
+
+2.1. Classification of RTSs
+In small-channel electronic transistor devices, a charge trap near
+channel-oxide interfaces may capture or release a single electron or a
+hole. The presence and the absence of a charge in the trap can determine two distinctive current levels. Often, multiple traps can exist with
+their unique transition amplitudes. A simple case is when these traps
+are mutually independent to contribute to the current values in time.
+The resulting RTSs belong to nRTS (Wang, 1993; Yuzhelevski et al.,
+2000; Simoen and Claeys, 2016; Guo et al., 2017; Zhang et al., 2018;
+Yang et al., 2022; Robitaille et al., 2023). Fig. 2 shows representative
+signal traces in time (left subpanel) and probability density functions
+(PDFs) (right subpanel) of nRTSs from 1 trap (Fig. 2(a)), 2 traps
+(Fig. 2(b)), and 3 traps (Fig. 2(c)), where the impact of background
+noise in terms of the amplitude and the spectral behavior is readily
+observed. The definition of 𝑄wn and 𝑄pn is given in Eq. (3). White noise
+background simply adds the local regional fluctuations (left column),
+whereas the pink noise as one of the low-frequency noise appends
+not only local fluctuating amplitudes but also a low-frequency global
+trend over the wide time range which is seen in the right column of
+Fig. 2. For mutually exclusive nRTSs with many traps, the maximum
+number of distinct signal levels 𝑁levels to occur rapid switching events
+is theoretically calculated as,
+𝑁levels = 2𝑁traps ,
+
+(1)
+
+where 𝑁traps is the trap number of the RTS. Specifically, 1-trap, 2-trap,
+and 3-trap RTSs manifest varying numbers of peaks in their PDFs, up
+to 2, 4, and 8, respectively.
+On the other hand, aRTSs which go beyond the simple nRTS classification, originate from complex internal mechanisms among multitraps. Three categories of aRTSs are identified in short-channel metal–
+oxide–semiconductor field-effect transistors (Guo et al., 2017; Zhang
+et al., 2018). A single-trap which contains metastable states gives
+distinct zones with different transition times. As shown in Fig. 3(a),
+a metastable RTS is a subtype of aRTS characterized by zone A (𝜏̄high
+≫ 𝜏̄low ) and zone B (𝜏̄high ≪ 𝜏̄low ), visually separated by different
+colors. The category of a coupled case refers to a two-trap device
+when each trap behaves differently when they are coupled or not. An
+example in Fig. 3(b) exhibits four peaks where one RTS has two distinct
+amplitudes. Lastly, in the scenario where two traps coexist within a
+single device and share a common level through strong coupling, three
+peaks are pronounced in the PDF, which is known to be a missing level
+type (Fig. 3(c)). Note that the presence of a background noise type and
+its strength greatly influences all types of aRTS, which hinders a clear
+distinction of aRTS types as seen in Fig. 3.
+2.2. Generation of noisy RTSs
+Since we aim to build a unified DAE model to tackle all the aforementioned RTS types, we harness a large dataset of RTS to train
+and validate our model. This section is devoted to explaining how
+to generate synthetic RTS data with two different background noise
+types of white and pink noise. We assume that the background noise is
+linearly added to pure RTSs, and a noisy RTS trace, symbolized as 𝐼(𝑡),
+can be expressed by the following equation:
+𝐼(𝑡) = 𝐼RTS (𝑡) + min{𝑖={1,2...,𝑁traps }} (𝛥RTS,𝑖 )𝑄bn 𝐼bn (𝑡),
+
+(2)
+
+where 𝐼RTS (𝑡) and 𝐼bn (𝑡) are the intensities of the pure RTS and the
+background noise at signal step 𝑡, 𝛥RTS,𝑖 is the amplitude of the 𝑖th trap
+RTS, and 𝑁traps is the number of traps given a system. 𝑄bn is introduced
+to quantify the amplitude of the background noise such that
+𝜎bn
+𝑄bn =
+,
+(3)
+min{𝑖={1,2...,𝑁traps }} (𝛥RTS,𝑖 )
+
+2. Complex multi-level RTSs
+We will delve into the classification and generation of complex
+multi-level RTSs. Section 2.1 introduces the multi-level nRTS with various different trap numbers and three types of aRTS. In Section 2.2, we
+explain the method to synthesize noisy RTSs incorporating background
+noise, which are used for validation of our denoising model proposed
+in Section 3.
+
+where 𝜎bn is the standard deviation of the background noise fluctuations and the subscript means bn ∈ {wn, pn} for white noise and pink
+noise.
+3
+
+Engineering Applications of Artificial Intelligence 135 (2024) 108685
+
+B. Deng et al.
+
+Fig. 2. Signal traces and probability density functions of nRTSs (1 trap (a), 2 traps (b), and 3 traps (c)) with white noise level 𝑄wn = 20% (left) and pink noise level 𝑄pn = 60%
+(right). 𝑄wn and 𝑄pn are defined in Eq. (3).
+
+Fig. 3. Signal traces and probability density functions of aRTSs (metastable (a), coupled (b), and missing level (c)) with white noise level 𝑄wn = 20% (left) and pink noise level
+𝑄pn = 60% (right).
+
+generation of synthetic data here, we cover a wide range of 𝑄wn and
+𝑄pn values between 1% and 60%.
+
+In this study, we examine white noise and pink noise as two specific
+types of background noise, and we use 𝑄wn and 𝑄pn defined in Eq. (3)
+with the subscript of wn and pn to denote the strength of white noise
+and pink noise. Fig. 4 depicts an explicit decomposition of generating
+noisy RTSs with two specific cases of white noise with 𝑄wn = 20%
+and 60% (left panels in Figs. 4(b) and (c)) and pink noise with (left
+panels in Figs. 4(d) and (e)) of 𝑄pn = 20% and 60% given a digitized
+RTS (Fig. 4(a)). The larger 𝑄wn and 𝑄pn are, the RTS patterns in the
+raw signals are harder to be recognized. White noise only adds local
+regional fluctuations to pure RTSs because its power spectral density is
+constant in frequency. On the other hand, the power spectral density
+of pink noise is low-frequency noise to have larger noise at a lower
+frequency, which attributes both local and global-trend fluctuations to
+the pure RTSs. Therefore, noisy RTSs with pink noise present greater
+complexity than those with white noise. When 𝑄wn and 𝑄pn are equal
+to 20% (Figs. 4(b) and (d)), pure RTS traces can still be recognized
+due to the relatively small background noise amplitude. As seen in
+Figs. 4(c) and (e), the background noise amplitudes with 60% 𝑄wn and
+𝑄pn are even larger than that of two-level RTSs. Especially for the pink
+noise case, the pure RTS trace is almost erased by these background
+fluctuations and this noisy RTS becomes harder to be analyzed. For the
+
+3. Proposed denoising models
+In order to tackle the challenge of denoising complex multi-level
+RTSs introduced in the previous section, we propose DAE UBL specifically designed for RTS denoising. Section 3.1 delves into the core
+principles of DAE and discusses its reconstruction loss and Section 3.2
+explains the architecture of our proposed DAE UBL and the loss function we use in detail. The denoising process flow of DAE UBL is
+introduced in Section 3.3 to demonstrate its adaptability to signals with
+various signal lengths.
+3.1. Denoising autoencoder
+Autoencoder is a type of artificial neural network model that comprises an encoder and a decoder. The purpose of autoencoders is to
+achieve feature recognition by learning the latent space representation of the input. Autoencoders and their variations (variational autoencoder, stacked autoencoder, and convolutional autoencoder) have
+4
+
+Engineering Applications of Artificial Intelligence 135 (2024) 108685
+
+B. Deng et al.
+
+Fig. 4. Synthetic noisy RTSs. A noisy RTS (right), which mimics real RTS in a device, is generated by the addition of pure RTS (a) and white noise with amplitude of (b) 𝑄wn =
+20% and (c) 𝑄wn = 60% or pink noise of (d) 𝑄pn = 20% and (e) 𝑄pn = 60%.
+
+Convolutional neural networks (CNN) have gained increasing popularity in engineering, particularly in image and 1D signal processing,
+by virtue of their efficacy in extracting features efficiently. The inherent
+characteristics of weight-sharing (Han et al., 2015) and local connections (Ankile et al., 2020) in CNNs contribute to their feature extraction
+capabilities. A convolutional DAE (cDAE) was also introduced for signal
+denoising, leveraging the structural advantages of CNN (Vincent et al.,
+2010). In the encoding stage, the cDAE employs modules composed
+of convolutional layers and pooling layers to adeptly extract features
+from the input noisy signal, resulting in a compressed latent space
+representation. For the decoding stage, modules consisting of upsampling and convolutional layers are applied to remap the latent space
+representation back to a denoised signal, ultimately serving as the
+output of the cDAE. The novel DAE model proposed in this work is also
+built upon the foundation of the cDAE, demonstrating a noteworthy
+denoising performance. This approach harnesses the power of CNNs for
+effective feature extraction and it offers a promising solution for signal
+denoising tasks.
+
+been applied in various areas, for example, medical image denoising (Gondara, 2016), biomedical anomalous signal detection (Roy et al.,
+2023), sentiment text generation in human-machine interface (Chen
+et al., 2023), and prognostic decision making and associated maintenance strategic actions for the remaining useful life (Remadna et al.,
+2023).
+The general architecture of an autoencoder is sketched in Fig. 5(a),
+where the encoder compresses the input 𝑥 into a compressed latent
+space representation ℎ and then remaps it into a decoded output, 𝑥.
+̂
+Mathematically, the process of encoding can be described as (Choi,
+2017),
+ℎ = 𝑓 (𝑊 𝑥 + 𝑏),
+
+(4)
+
+where 𝑊 is the weights of the encoder, 𝑏 is the biases of the encoder,
+and 𝑓 is an activation function. The output after the decoding process
+is written as
+̂
+𝑥̂ = 𝑓 (𝑊̂ ℎ + 𝑏),
+
+(5)
+
+where 𝑊̂ is the weights of the decoder, and 𝑏̂ is the biases of the
+decoder. Given a training dataset {𝑥𝑖 }𝑁
+, the overall training process
+𝑖=1
+of the encoder–decoder structure yields,
+̂
+𝑥̂ 𝑖 = 𝑓 (𝑊̂ (𝑊 𝑥𝑖 + 𝑏) + 𝑏).
+
+3.2. DAE UBL architecture
+Our cDAE model incorporates two neural networks (N: (1) a U-Net,
+which is a CNN developed for processing biomedical images (Ronneberger et al., 2015). A basic unit of the U-Net consists of a contracting
+path and an expansive path; (2) a Bi-LSTM, which is a special kind
+of RNN to exploiting long-term dependencies (Schuster and Paliwal,
+1997). The resulting DAE model with both the U-Net and the BiLSTM is called as DAE UBL, whose architecture is depicted in Fig. 6,
+containing unit layers of 1D convolution kernel (Conv1D()), maxpooling (MaxPooling1D()), and transposed convolution (Conv1DTranspose()).
+The kernel size of all convolution and transposed convolution layers is
+3, and the window size of all maxpooling layers is 2. The encoder part
+of the DAE UBL has three blocks of Conv1D() and MaxPooling1D() with
+different input sizes of the conv1D layer. At the end of the encoding
+stage, we add Bi-LSTM units with the forward and backward LSTM
+layers to capture past and future information, which suppress global
+trends of background fluctuations effectively.
+
+(6)
+
+Denoising autoencoders (DAE) (Vincent et al., 2008) are a special
+type of autoencoders that aim at learning robust representations from
+data. Fig. 5(b) illustrates the general architecture of a DAE. First,
+background noise is intentionally introduced to a pure signal 𝑥̄ 𝑝𝑢𝑟𝑒 to
+obtain a noisy signal 𝑥̄ 𝑛𝑜𝑖𝑠𝑦 . which is processed by denoising autoencoder to generate denoised signal 𝑥̂ 𝑑𝑒𝑛𝑜𝑖𝑠𝑒𝑑 . The performance of a DAE
+is quantified by calculating reconstruction error, which represents the
+loss of DAE during training. In our model, mean squared error (MSE) is
+used as the metric to denote the reconstruction error between 𝑥̂ 𝑑𝑒𝑛𝑜𝑖𝑠𝑒𝑑
+and pure signal 𝑥̄ 𝑝𝑢𝑟𝑒 . The following expression defines
+1 ∑ (𝑖)
+2
+(𝑥̂
+− 𝑥̄ (𝑖)
+𝑝𝑢𝑟𝑒 ) ,
+𝑁 𝑖=1 𝑑𝑒𝑛𝑜𝑖𝑠𝑒𝑑
+𝑁
+
+MSE =
+
+(7)
+
+for a signal with a signal length of 𝑁.
+5
+
+Engineering Applications of Artificial Intelligence 135 (2024) 108685
+
+B. Deng et al.
+
+Fig. 5. General architectures of an autoencoder (a) and a DAE (b).
+
+Suppose that the input of DAE UBL is a noisy signal with 𝑁 = 4000.
+The exact structure of the encoder proceeds in the following manner:
+Conv1D(16) → MaxPooling1D(2) → Conv1D(32) → MaxPooling1D(2) →
+Conv1D(64) → MaxPooling1D(2). After encoding, a latent space representation with the size of 500 × 64 can be obtained to represent
+the encoding feature of the noisy signal. The representation is then
+sequentially processed by two cascaded Bi-LSTM layers. The Bi-LSTM
+layers are composed of two LSTM layers (forward and backward)
+with 64 feature sizes for temporal feature extractions. Their generated
+output has a size of 500 × 256.
+On the other hand, the structure of the decoder also consists of three
+blocks of Conv1DTranspose(64) and concat(conv3, conv4) in the following
+manner: Conv1DTranspose(64) → concat(conv3, conv4) →
+Conv1DTranspose(32) → concat(conv2, conv5) → Conv1DTranspose(16) →
+concat(conv1, conv6) → Conv1D(1). The operation of concat() denotes
+the concatenation between the same-size convolution outputs from
+the encoder and the decoder. The introduction of concatenations is
+skip connections adapted from the U-Net, a classic fully convolutional
+network (FCN). Skip connections allow the DAE UBL to reuse low-level
+features extracted by the encoder to prevent overfitting. The stride of
+Conv1DTranspose is 2. After decoding, the output of Bi-LSTM layers is
+remapped to a denoised signal with 𝑁= 4000. The optimizer of DAE
+UBL is Adam, following the parameter setting from Kingma and Ba
+(2014). Activation functions of convolution layers are rectified linear
+units (ReLU) (Agarap, 2018) except the final convolution layer which
+uses a linear activation function. Bi-LSTM layers leverage Tanh as
+activation functions. Finally, MSE is estimated as reconstruction loss
+of DAE UBL according to Eq. (7).
+
+3.3. Denoising process with the DAE UBL
+Fig. 7 and the pseudocodes of Algorithms 1 and 2 encapsulate the
+denoising process flow (training and prediction) in the DAE UBL model,
+which undergoes training with an extensive dataset of complex multilevel RTSs in various types. According to Fig. 7, this unified model is
+used to predict an original RTS (green at the output) from a noisy RTS
+(gray in the input). To the best of our knowledge, most RTS denoising
+models in previous research works usually focus on a single RTS class
+with weak white noise background. One of our primary objectives is to
+establish an RTS denoising model which can handle a wide spectrum of
+complex multi-level RTS classes. To achieve this, six RTS classes with
+white noise or pink noise, as discussed in Section 2, are utilized to train
+a single DAE UBL. During the training, all noisy RTSs maintain the same
+signal length, aligning with the input length of DAE UBL, which can
+facilitate uniform and effective training across different RTS classes.
+At the prediction stage illustrated in Algorithm 2 and Fig. 7, if
+the signal length of the noisy RTS to be predicted is longer than the
+input length of DAE UBL (𝑁 = 4000), the noisy RTS is divided into
+𝑛 segments, whose length matches to be 4000 so that DAE UBL can
+predict segments directly. The trained DAE UBL then denoises each
+segment sequentially, yielding a denoised signal per segment. These
+denoised segments are then concatenated to produce the output, that
+maintains the same signal length as the original noisy RTS. In the
+event that the segment length of the 𝑛th segment is smaller than 4000,
+the segment is formed by the last 4000 signal steps to perform the
+denoising and prediction. The part that overlaps with the 𝑛th segment
+is extracted as the last segment, ensuring a coherent and consistent
+6
+
+Engineering Applications of Artificial Intelligence 135 (2024) 108685
+
+B. Deng et al.
+
+Fig. 6. The architecture of DAE UBL.
+
+Fig. 7. The prediction process flow of the DAE UBL (4000 signal length).
+
+3 traps and three aRTS types of metastable, coupled, and missing level
+cases are produced. The signal length of each RTS is 𝑁 = 4000, and
+the sample number per each RTS case is 12,000. In total, we generate
+144,000 RTS signals to train and validate our DAE UBL. All RTS classes
+possess either white noise or pink noise, whose amplitude sits in the six
+intervals of 𝑄wn or 𝑄pn such as 1%–10%, 11%–20%, 21%–30%, 31%–
+40%, 41%–50%, and 51%–60%. 2000 examples are generated for each
+amplitude interval of 𝑄wn and 𝑄pn shown in Table 2.
+We also prepare the evaluation dataset per each class enlisted in
+Table 3. The signal length of a single RTS in the evaluation dataset
+is 1,000,000, which is 500 times of the signal length in each training
+example, but the smaller sample number for each RTS class is chosen
+to be 60. We also examine all six ranges of 𝑄wn or 𝑄pn between 1 and
+60% with 10 RTSs per each internal summarized in Table 4.
+
+denoising process. Section 3 provides a comprehensive overview of the
+proposed DAE UBL, including the architecture and denoising process,
+and the next section discusses the denoising performance of DAE UBL
+in comparison to other classic denoising models.
+4. RTS denoising analysis with DAE UBL
+Exploiting our proposed DAE UBL, here we discuss the thorough
+evaluation of its denoising performance in detail. The datasets curated
+for DAE UBL training and evaluation states are presented in Section 4.1
+to specify the number of samples in each subcategory in terms of
+the RTS types, background noise category, and noise level strengths.
+Section 4.2 describes the experimental design to report hardware and
+software configurations and to determine parameters for DAE UBL
+during the analysis. In Section 4.3 we provide an in-depth evaluation
+of the denoising performance of DAE UBL using different metrics and
+compare it with other classic denoising models. Finally, we conduct an
+ablation study in Section 4.4 to examine how the two components that
+we introduce contribute to the denoising performance of DAE UBL for
+highlighting the model strengths.
+
+4.2. Experimental design
+A single Nvidia A100 GPU with 40 GB VRAM is employed for the
+DAE UBL training. To match the performance of the GPU, an AMD
+Rome 7532 CPU clocked at 2.40 GHz is equipped, which has 32 cores.
+The DAE UBL training and evaluation codes are developed with the programming language Python 3.9 to apply the deep learning framework
+Keras 2.13.1. For training settings and strategies, we investigate five
+hyperparameters as mentioned in Algorithm 1 during the experiment:
+learning rate, training epochs, early stopping epochs, batch size, and
+train/validation split ratio. Table 5 summarizes the attempted values
+of each hyperparameters. Following Kingma and Ba (2014), we set our
+
+4.1. RTS dataset for denoising training and evaluation
+Both nRTS and aRTS datasets are synthesized including the ranges
+of background white noise or pink noise strength for DAE UBL training
+and evaluation. Table 1 summarizes the six RTS types with two background noise types, where nRTSs are prepared for 1 trap, 2 traps and
+7
+
+Engineering Applications of Artificial Intelligence 135 (2024) 108685
+
+B. Deng et al.
+
+Table 1
+Synthetic RTS datasets for training and validation.
+
+Algorithm 1 Training process of DAE UBL
+1: prepare datasets, including various complex multi-level RTS types
+
+RTS class
+
+Noise type
+
+Signal length
+
+Sample number
+
+for training. The inputs and labels are denoted as 𝑋𝑡𝑟𝑎𝑖𝑛 , 𝑌𝑡𝑟𝑎𝑖𝑛 . Each
+RTS in the training dataset has signal length 𝑁𝑡𝑟𝑎𝑖𝑛 = 4000.
+2: set number of training epochs 𝑁𝑒𝑝𝑜𝑐ℎ = 500
+3: set early stopping epochs 𝑁𝑒𝑠 = 10
+4: set batch size 𝑁𝑏𝑎𝑡𝑐ℎ = 64
+5: set the lowest reconstruction loss 𝐿𝑙𝑜𝑤𝑒𝑠𝑡 = ∞
+6: initialize parameters of DAE UBL
+7: compile DAE UBL with an optimizer Adam and a reconstruction
+loss (MSE)
+8: shuffle 𝑋𝑡𝑟𝑎𝑖𝑛 , 𝑌𝑡𝑟𝑎𝑖𝑛 and split it into training subset 𝑋𝑡𝑟 , 𝑌𝑡𝑟 and
+validation subset 𝑋𝑣𝑎𝑙 , 𝑌𝑣𝑎𝑙 with a proportion of 80% for training
+and 20% for validation
+9: for each epoch in 𝑁𝑒𝑝𝑜𝑐ℎ do
+10:
+for each batch 𝑋𝑏𝑎𝑡𝑐ℎ , 𝑌𝑏𝑎𝑡𝑐ℎ from 𝑋𝑡𝑟 , 𝑌𝑡𝑟 do
+11:
+train DAE UBL using 𝑋𝑏𝑎𝑡𝑐ℎ as noisy signal (input) and 𝑌𝑏𝑎𝑡𝑐ℎ
+as pure signal (label)
+12:
+compute reconstruction loss and update model weights
+13:
+end for
+14:
+evaluate DAE UBL on validation subset 𝑋𝑣𝑎𝑙 , 𝑌𝑣𝑎𝑙 and calculate
+validation reconstruction loss 𝐿𝑒𝑝𝑜𝑐ℎ
+𝑣𝑎𝑙
+
+1-trap
+1-trap
+2-trap
+2-trap
+3-trap
+3-trap
+metastable
+metastable
+coupled
+coupled
+missing-level
+missing-level
+
+White noise
+Pink noise
+White noise
+Pink noise
+White noise
+Pink noise
+White noise
+Pink noise
+White noise
+Pink noise
+White noise
+Pink noise
+
+4,000
+4,000
+4,000
+4,000
+4,000
+4,000
+4,000
+4,000
+4,000
+4,000
+4,000
+4,000
+
+12,000
+12,000
+12,000
+12,000
+12,000
+12,000
+12,000
+12,000
+12,000
+12,000
+12,000
+12,000
+
+15:
+16:
+
+Table 2
+The amplitude range of the background noise to produce noisy RTSs in the training
+and validation dataset.
+
+compare 𝐿𝑒𝑝𝑜𝑐ℎ
+with the lowest reconstruction loss
+𝑣𝑎𝑙
+if 𝐿𝑒𝑝𝑜𝑐ℎ
+< 𝐿𝑙𝑜𝑤𝑒𝑠𝑡 then
+𝑣𝑎𝑙
+
+Noise level
+
+Signal length
+
+Samples number
+
+1%–10%
+11%–20%
+21%–30%
+31%–40%
+41%–50%
+51%–60%
+
+4,000
+4,000
+4,000
+4,000
+4,000
+4,000
+
+2,000
+2,000
+2,000
+2,000
+2,000
+2,000
+
+Table 3
+The evaluation dataset.
+
+𝑒𝑝𝑜𝑐ℎ
+
+17:
+set 𝐿𝑙𝑜𝑤𝑒𝑠𝑡 = 𝐿𝑣𝑎𝑙
+18:
+end if
+19:
+if 𝐿𝑙𝑜𝑤𝑒𝑠𝑡 is not updated more than 𝑁𝑒𝑠 then
+20:
+break
+⊳ Exit the loop
+21:
+end if
+22: end for
+23: pick the model weights with reconstruction loss 𝐿𝑙𝑜𝑤𝑒𝑠𝑡 as the
+
+trained weights of DAE UBL
+
+Algorithm 2 Prediction process of DAE UBL
+1: prepare an RTS 𝑋𝑝𝑟𝑒𝑑 for evaluation with signal length 𝑁𝑝𝑟𝑒𝑑 , 𝑁𝑝𝑟𝑒𝑑
+
+RTS class
+
+Noise type
+
+Signal length
+
+Samples number
+
+1-trap
+1-trap
+2-trap
+2-trap
+3-trap
+3-trap
+metastable
+metastable
+coupled
+coupled
+missing-level
+missing-level
+
+White noise
+Pink noise
+White noise
+Pink noise
+White noise
+Pink noise
+White noise
+Pink noise
+White noise
+Pink noise
+White noise
+Pink noise
+
+1,000,000
+1,000,000
+1,000,000
+1,000,000
+1,000,000
+1,000,000
+1,000,000
+1,000,000
+1,000,000
+1,000,000
+1,000,000
+1,000,000
+
+60
+60
+60
+60
+60
+60
+60
+60
+60
+60
+60
+60
+
+> 𝑁𝑡𝑟𝑎𝑖𝑛
+2: create an empty output array 𝑌𝑝𝑟𝑒𝑑 with 𝑁𝑝𝑟𝑒𝑑 signal length
+3: divide 𝑋𝑝𝑟𝑒𝑑 into 𝑓 𝑙𝑜𝑜𝑟(
+
+𝑁𝑝𝑟𝑒𝑑
+𝑁𝑡𝑟𝑎𝑖𝑛
+
+Table 4
+The amplitude range of the background noise to produce noisy RTSs in the evaluation
+dataset.
+
+) + 𝐻(𝑁𝑝𝑟𝑒𝑑 mod 𝑁𝑡𝑟𝑎𝑖𝑛 ) segments with
+
+𝑁𝑡𝑟𝑎𝑖𝑛 signal length except the last segment
+𝐻(𝑥) = 1 if 𝑥 ≠ 0
+𝑁𝑝𝑟𝑒𝑑
+4: for 𝑛𝑡ℎ segment in 𝑓 𝑙𝑜𝑜𝑟(
+) segments do
+𝑁
+
+⊳ 𝐻(𝑥) = 0 if 𝑥 = 0,
+
+𝑡𝑟𝑎𝑖𝑛
+
+5:
+6:
+
+predict the segment using trained DAE UBL
+assign the predicted segment to 𝑌𝑝𝑟𝑒𝑑 ranging from index
+𝑁
+
+𝑁
+
+(𝑓 𝑙𝑜𝑜𝑟( 𝑁 𝑝𝑟𝑒𝑑 ) ∗ 𝑛) to index (𝑓 𝑙𝑜𝑜𝑟( 𝑁 𝑝𝑟𝑒𝑑 ) ∗ 𝑛 + 𝑁𝑡𝑟𝑎𝑖𝑛 − 1)
+𝑡𝑟𝑎𝑖𝑛
+
+𝑡𝑟𝑎𝑖𝑛
+
+7: end for
+8: if 𝐻(𝑁𝑝𝑟𝑒𝑑 mod 𝑁𝑡𝑟𝑎𝑖𝑛 ) = 1 then
+9:
+predict the segment of 𝑋𝑝𝑟𝑒𝑑 ranging from index (𝑁𝑝𝑟𝑒𝑑 − 𝑁𝑡𝑟𝑎𝑖𝑛 )
+
+Noise level
+
+Signal length
+
+Samples number
+
+1%–10%
+11%–20%
+21%–30%
+31%–40%
+41%–50%
+51%–60%
+
+1,000,000
+1,000,000
+1,000,000
+1,000,000
+1,000,000
+1,000,000
+
+10
+10
+10
+10
+10
+10
+
+Table 5
+Hyperparameter settings.
+
+to index (𝑁𝑝𝑟𝑒𝑑 − 1) using trained DAE UBL
+10:
+assign the predicted segment to 𝑌𝑝𝑟𝑒𝑑 ranging from index
+(𝑁𝑝𝑟𝑒𝑑 − 𝑁𝑡𝑟𝑎𝑖𝑛 ) to index (𝑁𝑝𝑟𝑒𝑑 − 1)
+11: end if
+12: return 𝑌𝑝𝑟𝑒𝑑
+
+learning rate to be 0.001. In the experiment, 500 training epochs are
+applied to ensure the model reaches the lowest best validation error
+(MSE), and we apply the early stopping training strategy to terminate
+the training process earlier if the validation error does not decrease
+within 5 or 10 epochs. Three different batch sizes of 16, 32, and 64
+are examined and two different train/validation split ratios are tested
+either 90%:10% or 80%:20%.
+
+Hyperparameters
+
+Values
+
+Learning rate
+Training epochs
+Early stopping epochs
+Batch size
+Train/validation split ratio
+
+0.001
+500
+5, 10
+16, 32, 64
+90%:10%, 80%:20%
+
+We examine the effect of hyperparameter settings in terms of the
+validation error and report the results in Table 6. According to the
+table, the trained model has the lowest best validation error with a
+batch size of 64, a train/validation split ratio set to 80%:20%, and early
+stopping epochs equal to 10. Before splitting, the training dataset is
+shuffled to ensure that the training and evaluation sets have reasonable
+8
+
+Engineering Applications of Artificial Intelligence 135 (2024) 108685
+
+B. Deng et al.
+Table 6
+Validation error of different hyperparameter settings.
+Batch size
+
+Train/validation split ratio
+
+Early stopping epochs
+
+Best validation error
+
+16
+32
+64
+16
+32
+64
+16
+32
+64
+16
+32
+64
+
+90%:10%
+90%:10%
+90%:10%
+90%:10%
+90%:10%
+90%:10%
+80%:20%
+80%:20%
+80%:20%
+80%:20%
+80%:20%
+80%:20%
+
+5
+5
+5
+10
+10
+10
+5
+5
+5
+10
+10
+10
+
+27.96
+16.05
+14.07
+27.96
+14.20
+7.35
+26.98
+15.69
+13.66
+26.98
+13.88
+7.15
+
+Table 7
+Average Prediction Time for one RTS data with five denoising models.
+Denoising Model
+
+Average prediction time
+
+Standard deviation
+
+FFT
+DWT
+MA
+EMD
+DAE UBL
+
+0.56 s
+0.49 s
+0.61 s
+792.83 s
+75.60 s
+
+0.03
+0.02
+0.02
+32.45
+1.85
+
+and aRTSs in terms of 𝑄wn and 𝑄pn for white noise and pink noise.
+Table 8 collects the statistical analysis of the boxplots in nRTS and aRTS
+datasets: average median, average interquartile range (IQR), and 𝑅IQRs
+of RMSEs from all five models. Each number in Table 8 comes from the
+18 boxplots of three types (1-trap, 2-trap, 3-trap of nRTS; metastable,
+coupled, missing level of aRTS) and the six noise-level ranges. The IQR
+range 𝑅IQR is defined as,
+𝑅IQR = max(IQRi ) − min(IQRi )
+
+where 𝑖 = {1, 2, … , 18}, which represents three types and six noise level
+intervals. Note that 𝑅IQR reflects the impact of 𝑄wn and 𝑄pn size. The
+lower 𝑅IQR indicates that the model is robust against the background
+noise level.
+From the standpoint of background noise type, the median values
+and IQRs of RMSEs for pink noise cases are markedly higher than
+those for white noise cases. This observation substantiates the aforementioned points in Section 1 that RTSs affected by pink noise present
+a higher level of complexity level than those influenced by white noise.
+As 𝑄wn or 𝑄pn increases, the median values and IQRs of RMSEs for
+all RTS classes increase as expected. The denoised RTSs by the DAE UBL
+model have low values of RMSE over the entire ranges of 𝑄wn or 𝑄pn ,
+which indicate that they are extremely closer to pure RTSs than the
+results from other classic denoising models. The quantitative analysis
+summarizes that for nRTSs, the average median RMSEs of DAE UBL
+with the white noise and pink noise datasets are less than 2 and 4,
+which are 78% and 63% lower than the best classic denoising results
+from EMD of nearly 6 and 10). In the case of aRTSs, the average median
+RMSEs of DAE UBL are approximately 1 and 5 for the white noise and
+the pink noise datasets, respectively. These correspond to more than
+81% and 66% lower than the best classic results from the EMD method
+of around 7 and 14.
+Furthermore, the robustness of DAE UBL is notably superior to that
+of the other classic denoising models in terms of the RMSE distributions. The average IQRs of RMSEs of DAE UBL with nRTS data are 1
+and 3.2 for white noise and pink noise. These are more than 3 to 4
+times better than those of any classic denoising models. Similarly, the
+aRTS dataset has the average IQRs of RMSEs of nearly 1 (white noise)
+and 4 (pink noise) with DAE UBL, which are 2 to 6 times lower than
+four other classic models.
+We point out that the IQRs of RMSEs of DAE UBL remain rather
+constant over the range of 𝑄wn or 𝑄pn values, but other classic denoising
+models result in bigger IQRs for larger 𝑄wn or 𝑄pn . Statistically, the
+𝑅IQRs of RMSEs of DAE UBL for nRTS are approximately 3 (white noise)
+and 10 (pink noise), which are over 65% and 61% tighter distributions
+than the best values among the classic denoising models (nearly 8 and
+26). For aRTSs degraded by white noise and pink noise, the 𝑅IQRs of
+RMSEs of DAE UBL are around 2 and 8, which are above 74% and 58%
+lower than the best values among the classic denoising models (close
+to 7 and 18).
+Overall, the lower mean RMSE values with tighter IQR distributions support the excellent performance and robustness of DAE UBL in
+denoising complex multi-level RTSs with white noise and pink noise.
+
+distributions of all RTS classes. The splitting and shuffling of training
+and validation subsets are both implemented by the train_test_split()
+function from Scikit-learn.
+4.3. Denoising performance comparisons
+The denoising performance of DAE UBL on the evaluation dataset is
+compared with four classic denoising models: (1) Fast Fourier transform
+(FFT), (2) DWT (Hendrickson et al., 2020), (3) MA (Robitaille et al.,
+2023), and (4) empirical mode decomposition (EMD) (Moshrefi et al.,
+2021). This subsection is devoted to discussing how to evaluate the
+denoising performance of the model in terms of root mean squared
+error (RMSE), signal-to-noise ratio (SNR), denoising visualization, and
+an ablation study.
+4.3.1. Computation time
+Our DAE UBL approach is inherently different in the RTS analysis
+compared to classic denoising models. First, it designs and builds a NN
+architecture, which needs to be trained with various types of data sets.
+The training time of Table 1 is 6.88 h using an A100 GPU and an AMD
+Rome 7532 CPU, which means that our model complexity is moderate.
+We further assess the prediction time to process each data set with
+five different models: FFT, DWT, MA, EMD, and DAE UBL. The average
+prediction time for the evaluation dataset in Table 3 is compared in
+Table 7. Our prediction time estimate code is implemented by Apple
+M2 Max CPU and GPU (shared 16 GB memory). We acknowledge that
+the DAE UBL takes longer time to process the same data set, but over a
+minute per each data is still reasonable to obtain superior performance
+outcomes which are explicitly assessed in the subsequent subsections.
+In addition, we emphasize that after training, DAE UBL does not
+need to change any fitting parameters to complicated multi-level RTSs,
+which makes our DAE UBL become a versatile solution for analyzing
+various types of RTSs.
+4.3.2. Root mean squared error
+The (RMSE) is computed from,
+√
+RMSE = MSE
+
+(9)
+
+(8)
+
+where MSE is the mean squared error in Eq. (7). Compared with
+MSE, RMSE can represent the absolute difference between pure and
+denoised signals. The lower the RMSE, the better the quality of the
+denoised signal. Figs. 8 to 11 display the RMSE boxplots of nRTSs
+9
+
+Engineering Applications of Artificial Intelligence 135 (2024) 108685
+
+B. Deng et al.
+
+Table 8
+Statistics for RMSE boxplots.
+RTS type with noise
+
+Model name
+
+Average median
+
+Average IQR
+
+𝑅IQRs
+
+nRTS with white noise
+
+FFT
+DWT
+EMD
+MA
+DAE UBL
+
+10.09
+8.42
+5.76
+9.10
+1.26
+
+6.43
+6.61
+4.17
+5.65
+1.00
+
+18.50
+14.64
+9.92
+8.38
+2.94
+
+nRTS with pink noise
+
+FFT
+DWT
+EMD
+MA
+DAE UBL
+
+12.82
+11.53
+10.44
+11.95
+3.84
+
+9.62
+10.05
+9.30
+10.51
+3.20
+
+29.89
+25.76
+31.11
+29.49
+10.11
+
+aRTS with white noise
+
+FFT
+DWT
+EMD
+MA
+DAE UBL
+
+10.74
+9.60
+6.97
+9.76
+1.33
+
+5.80
+5.80
+4.23
+5.72
+0.84
+
+11.71
+11.39
+7.25
+8.59
+1.88
+
+aRTS with pink noise
+
+FFT
+DWT
+EMD
+MA
+DAE UBL
+
+15.12
+14.29
+14.17
+15.14
+4.82
+
+9.42
+9.61
+9.31
+10.03
+3.61
+
+21.20
+18.16
+23.01
+19.69
+7.55
+
+Fig. 8. RMSE boxplots of nRTSs with (a) 1 trap, (b) 2 traps, and (c) 3 traps plus white noise.
+
+10
+
+Engineering Applications of Artificial Intelligence 135 (2024) 108685
+
+B. Deng et al.
+
+Fig. 9. RMSE boxplots of nRTSs with (a) 1 trap, (b) 2 traps, and (c) 3 traps plus pink noise.
+
+for all RTS classes with both white noise and pink noise. The average
+median SNRs of DAE UBL are around 10 higher than the values from all
+classic denoising models. In SNR, the values of average IQR and 𝑅IQRs
+should be considered together with average median. Since DAE UBL has
+larger average median, the absolute values of average IQR and 𝑅IQRs
+are larger, which is still better than or compatible with the classical
+results. This strengthens the performance of DAE UBL to obtain pure
+RTSs from noisy RTSs than other classic denoising models.
+
+4.3.3. Signal-to-noise ratio
+SNR is a metric for measuring the ratio between pure signal and
+background noise power. It is defined as,
+∑𝑁 2
+𝑥̄
+SNR = 10 ⋅ log10 ( ∑𝑁 𝑛=1 𝑛
+)
+(10)
+̂ 𝑛 − 𝑥̄ 𝑛 )2
+𝑛=1 (𝑥
+where 𝑥̄ 𝑛 is the pure signal intensity of the signal step 𝑛, 𝑥̂ 𝑛 is the
+denoised signal intensity of the signal step 𝑛, and 𝑁 is the signal length.
+According to Eq. (10), the higher the SNR, the better the quality of the
+denoised signal. Figs. 12 to 15 present the SNR distributions of nRTSs
+and aRTSs with white noise and pink noise, and Table 9 collects average
+median values, average IQR, and 𝑅IQRs of SNRs from the boxplots.
+Regarding the background noise type, the median values and IQRs
+of SNRs for pink noise are worse than the white noise counterparts. As
+expected, the median values of SNRs for all RTS classes go down as 𝑄wn
+or 𝑄pn increases. Again DAE UBL outperforms than the other denoising
+models for both nRTS datasets and aRTS datasets. For example, the
+average median SNRs of DAE UBL are approximately 35 (white noise,
+nRTS) and 24 (pink noise, nRTS), while the best SNR values come from
+the EMD model with around 21 and 16. The situation of aRTSs is also
+similar in that the average median SNRs of DAE UBL are close to 34 and
+22, which are over 77% and 72% higher than the best classic denoising
+model from EMD of more than 19 and 13 for the white noise and pink
+noise datasets, respectively.
+According to Table 9, the average IQRs and IQR ranges of SNRs
+of DAE UBL are generally competitive to the classic denoising models
+
+4.3.4. Denoising visualization
+To facilitate a comprehensive comparison of denoising model performances, we highlight the superior denoising capabilities of DAE UBL
+by visualizing the denoising results of DAE UBL and MA in the time
+domain. Fig. 16 showcase the denoised signal traces of nRTSs (a) 1
+trap, (b) 2 traps, and (c) 3 traps under white noise level 𝑄wn = 20%
+(left) and (d) 1 trap, (e) 2 traps, and (f) 3 traps with pink noise level
+𝑄pn = 60% (right). And three types of aRTSs are presented in Fig. 17:
+(a) metastable, (b) coupled, and (c) missing level with white noise level
+𝑄wn = 20% (left) and (d) metastable, (e) coupled, and (f) missing level
+with pink noise level 𝑄pn = 60% (right). We presented the results of
+MA (left) and DAE UBL (right), respectively for direct comparison. In
+each plot, the raw signal is represented in gray, the pure signal in blue,
+and the denoised signal in green. This direct visualization allows us to
+perceive the advantages of the DAE UBL in denoising.
+For noisy RTSs with weak white noise of 𝑄wn = 20% (left panels),
+the denoising results of both DAE UBL and MA look very good and
+11
+
+Engineering Applications of Artificial Intelligence 135 (2024) 108685
+
+B. Deng et al.
+
+Fig. 10. RMSE boxplots of three aRTS types: (a) metastable, (b) coupled, and (c) missing-level with white noise.
+
+Fig. 11. RMSE boxplots of three aRTS types: (a) metastable, (b) coupled, and (c) missing-level with pink noise.
+
+12
+
+Engineering Applications of Artificial Intelligence 135 (2024) 108685
+
+B. Deng et al.
+
+Fig. 12. SNR boxplots of nRTSs with (a) 1 trap, (b) 2 traps, and (c) 3 traps with white noise.
+
+Table 9
+Statistics for SNR boxplots.
+RTS type with noise
+
+Model name
+
+Average median
+
+Average IQR
+
+𝑅IQRs
+
+nRTS with white noise
+
+FFT
+DWT
+EMD
+MA
+DAE UBL
+
+16.26
+18.30
+21.06
+17.30
+34.84
+
+2.62
+4.84
+3.26
+3.80
+3.86
+
+12.41
+11.60
+4.41
+7.91
+7.10
+
+nRTS with pink noise
+
+FFT
+DWT
+EMD
+MA
+DAE UBL
+
+13.44
+14.83
+15.62
+14.57
+24.45
+
+2.96
+5.37
+4.51
+4.84
+5.15
+
+6.84
+6.56
+6.11
+10.04
+7.39
+
+aRTS with white noise
+
+FFT
+DWT
+EMD
+MA
+DAE UBL
+
+15.56
+17.00
+19.05
+15.84
+33.77
+
+2.26
+3.62
+2.24
+3.15
+3.03
+
+7.21
+9.88
+4.45
+6.78
+3.85
+
+aRTS with pink noise
+
+FFT
+DWT
+EMD
+MA
+DAE UBL
+
+11.85
+12.77
+13.04
+12.51
+22.45
+
+2.64
+3.62
+3.46
+3.88
+4.83
+
+5.32
+7.24
+6.80
+7.96
+5.94
+
+acceptable although the denoising result of MA still retains some local
+regional fluctuations. On the other hand, DAE UBL generally removes
+these fluctuations efficiently and only has minor subtle shifts at some
+
+transition positions. The denoised signal has almost recovered the pure
+RTS. DAE UBL surpasses MA in denoising RTSs with white noise,
+although the performance of MA in this class is satisfactory.
+13
+
+Engineering Applications of Artificial Intelligence 135 (2024) 108685
+
+B. Deng et al.
+
+Fig. 13. SNR boxplots of nRTSs with (a) 1 trap, (b) 2 traps, and (c) 3 traps with pink noise.
+
+Fig. 14. SNR boxplots of three aRTS types of (a) metastable, (b) coupled, and (c) missing-level with white noise.
+
+14
+
+Engineering Applications of Artificial Intelligence 135 (2024) 108685
+
+B. Deng et al.
+
+Fig. 15. SNR boxplots of three aRTS types of (a) metastable, (b) coupled, and (c) missing-level with pink noise.
+
+The performance advantage of DAE UBL is particularly pronounced
+for harder cases. When 𝑄pn is set to 60%, the presence of global-trend
+fluctuations dramatically impacts both DAE UBL and MA. As 𝑁traps is
+larger, distinguishing the levels to which the signal intensities belong
+becomes more challenging after denoising. However, DAE UBL exhibits
+a notably lower susceptibility to the adverse effects of global-trend
+fluctuations than MA. Upon closer inspection, it becomes apparent that
+RTSs denoised by MA suffer from existing global-trend fluctuations in
+all time. Especially when 𝑁traps ≤ 2, these global-trend fluctuations pose
+a risk of causing errors in level estimation during RTS reconstruction. In
+contrast, DAE UBL demonstrates superior results in suppressing these
+global-trend fluctuations in denoised RTSs. The time series predicted
+by DAE UBL remains smooth when the signal level remains constant,
+although occasional errors in level estimation may occur, particularly
+in cases with 2-trap nRTS and metastable aRTS.
+Based on the excellent denoising performance of our DAE UBL
+on synthetic RTSs, verification tests were conducted to clarify the
+denoising efficacy of DAE UBL on real RTSs. RTSs are recorded from
+a two-terminal carbon nanotube film device where a voltage is biased.
+The device is made of a multi-walled carbon nanotube film with a
+thickness of 65 nm and a width of 500 nm as a transport channel
+and it is placed in a cryostat, and the data in Fig. 18 are taken at 9
+Kelvin. Fig. 18 demonstrates the denoised signal traces of a two-level
+nRTS (a) and a missing level aRTS (b) using moving average (left)
+and DAE UBL (right). Real raw signals in gray suffer from rapid and
+slow background fluctuations, which hinder reliable RTS extraction.
+Although the ground truths of real RTSs are unknown, we can still
+witness two major advantages of DAE UBL over MA. The first benefit of
+
+DAE UBL compared to MA is that it can effectively mitigate unpatterned
+background fluctuations composed of local regional, and global trend
+fluctuations, consistent with the results of the synthetic RTS visual
+evaluation. This advantage is particularly obvious in both examples in
+Fig. 18, which reveal that DAE UBL almost erases the global trend of
+pink noise with no level shift compared to MA. The second advantage
+of DAE UBL is to recognize the levels from fast traps when 𝛥𝑅𝑇 𝑆 of
+the trap is comparatively large. Unlike MA, the amplitudes of aRTS are
+reliably detected in Fig. 18(b).
+We conclude that the denoising outcomes of DAE UBL in both
+real and synthetic RTSs excel that of MA, particularly for RTSs with
+pink noise. This enhanced performance is instrumental in making the
+reconstruction of RTSs with pink noise feasible.
+4.4. Ablation study
+In order to appreciate the components of U-Net and Bi-LSTM NN in
+the overall denoising performance, we conduct an ablation study with
+two control models of DAE and DAE+Bi-LSTM by removing a certain
+element. Fig. 19 provides RMSE and SNR boxplots of three models for
+white noise and pink noise combining both nRTS and aRTS datasets.
+4.4.1. Effect of Bi-LSTM
+Analyzing the RMSE results in Fig. 19(a), it is evident that the
+incorporation of Bi-LSTM units leads to much lower RSME compared
+to the DAE model, both under white noise (left) and pink noise (right).
+Notably, within the range of 𝑄pn ∈ [41%, 50%], the fluctuation range
+15
+
+Engineering Applications of Artificial Intelligence 135 (2024) 108685
+
+B. Deng et al.
+
+Fig. 16. Denoised signal traces of nRTSs using MA (left) and DAE UBL (right) for (a) 1 trap, (b) 2 traps, and (c) 3 traps under white noise level 𝑄wn = 20% (left) and (d) 1 trap,
+(e) 2 traps, and (f) 3 traps with pink noise level 𝑄pn = 60% (right).
+
+global-trend fluctuation trends. Both these signal traces denoised by
+DAE UBL and DAE+Bi-LSTM are comparatively excellent denoising
+results. While DAE UBL preserves slightly larger local regional fluctuations than DAE+Bi-LSTM, it also incurs fewer level shifts. This
+phenomenon arises because DAE+Bi-LSTM may cause level shifts to
+eliminate global-trend fluctuations. Our ablation study indicates the
+skip connections from U-Net in DAE UBL further refine the denoising
+model performance, especially in level estimations via the interplay of
+reducing fluctuations and minimizing level shifts.
+
+of DAE+Bi-LSTM is reduced by over 50% less than that of DAE. In
+addition, SNR has improved for DAE+Bi-LSTM whose median values
+are higher than those of DAE. Whereas the SNR from DAE+Bi-LSTM
+would be compatible to that of DAE UBL for two background noise
+cases, the U-Net features can refine RTS reconstruction to predict pure
+RTS signals better. (Fig. 19(b)).
+The denoised signals from the DAE and the DAE+Bi-LSTM are
+plotted in Fig. 20(a) for the signal traces of 1-trap (left) and 2-trap
+RTS (right) when 𝑄pn = 57%. It is apparent that the signal traces
+denoised by DAE (pink) still contain large global-trend fluctuations,
+and the introduction of Bi-LSTM (green) enables the denoised signals to
+effectively smooth the predicted traces by capturing the bidirectional
+context, which is almost similar to the results from the DAE UBL
+denoised signal (red) in Fig. 20(b).
+
+5. Conclusions and future work
+Recently, DAEs have emerged as highly effective tools for addressing one-dimensional signal denoising challenges, leveraging their robust feature extraction and reconstruction capabilities. We apply this
+successful DAE scheme to the denoising task of complex multi-level
+RTSs. Our model DAE UBL adopts the classic encoder–decoder structure, excelling in the feature extraction from noisy signals and the
+subsequent reconstruction of denoised signals. Two key enhancements
+to characterize our DAE UBL performance come from: (i) Bi-LSTM
+neural networks that can capture past and future information; (ii) skip
+connections from U-Net that utilize the reuse of low-level features to
+minimize level shifts as a source of errors. These enhancements enable
+
+4.4.2. Effect of skip connection from U-Net
+In contrast to DAE+Bi-LSTM, DAE UBL introduces skip connections
+from U-Net with the aim of mitigating level shifts by the reuse of
+low-level features. As depicted in Fig. 19, DAE UBL demonstrates a
+further reduction in RMSEs and an improvement in SNRs for noisy RTSs
+affected by white noise. However, for RTSs with pink noise, DAE UBL
+shows slightly higher RMSEs and SNRs than DAE+Bi-LSTM.
+Assessing the denoised signals in time shown in Fig. 20(b), the skip
+connections in U-Net improve the denoising performance by flattening
+16
+
+Engineering Applications of Artificial Intelligence 135 (2024) 108685
+
+B. Deng et al.
+
+Fig. 17. Denoised signal traces of aRTSs using MA (left) and DAE UBL (right) for (a) metastable, (b) coupled, and (c) missing level with white noise level 𝑄wn = 20% (left) and
+(d) metastable, (e) coupled, and (f) missing level with pink noise level 𝑄pn = 60% (right).
+
+Fig. 18. Denoising results from (a) nRTS and (b) aRTS taken from a carbon nanotube film device with moving average (left) and DAE UBL (right).
+
+DAE UBL to reconstruct pure RTSs to a great extent, thereby boosting
+RTS collection, monitoring, and quantitative analysis for real-time fluctuating signals occurring routinely in electronic, optical, mechanical,
+biological, and chemical systems.
+Experimental findings affirm the desirable denoising performance
+of DAE UBL when compared to four traditional denoising models. In
+general, DAE UBL exhibits markedly lower RMSEs and higher SNRs
+
+than the other denoising models in terms of RMSE, SNR, IQR and 𝑅IQRs
+for both nRTS and aRTS dataset. And the actual time traces of denoised
+signals directly show that DAE UBL effectively suppresses local and
+global-trend fluctuations from noisy RTSs.
+Our DAE UBL demonstrates remarkable success in denoising multilevel RTSs with white noise; however, there remains an opportunity
+for improvement in its performance against the RTSs with pink noise.
+17
+
+Engineering Applications of Artificial Intelligence 135 (2024) 108685
+
+B. Deng et al.
+
+Fig. 19. Ablation Study: (a) RMSE and (b) SNR of three models: DAE (blue), DAE+Bi-LSTM (yellow) and DAE UBL (red).
+
+Fig. 20. Denoised signal traces of three models: DAE (pink), DAE+Bi-LSTM (green) and DAE UBL (red).
+
+Data availability
+
+We envision that the next phase of this research will focus on refining
+the denoising schemes for pink noise cases further. An immediate next
+step would be to quantify the impact of DAE UBL on the values of RTS
+parameters in various RTS types.
+
+Data will be made available on request.
+Acknowledgments
+
+CRediT authorship contribution statement
+
+We acknowledge the support of Industry Canada, the Ontario Ministry of Research, Innovation and Science through Early Researcher
+Awards, the Canada First Research Excellence Fund-Transformative
+Quantum Technologies (CFREF-TQT).
+
+Bowen Deng: Writing – review & editing, Writing – original draft,
+Visualization, Validation, Methodology, Investigation, Formal analysis,
+Data curation, Conceptualization. HeeBong Yang: Writing – review &
+editing, Writing – original draft, Investigation, Data curation, Conceptualization. Na Young Kim: Writing – review & editing, Writing – original draft, Visualization, Supervision, Resources, Project administration, Methodology, Investigation, Funding acquisition, Data curation,
+Conceptualization.
+
+References
+Abrahart, R.J., See, L.M., Solomatine, D.P., 2008. Practical Hydroinformatics: Computational Intelligence and Technological Developments in Water Applications. Vol.
+68, Springer Science & Business Media.
+Agarap, A.F., 2018. Deep learning using rectified linear units (relu). arXiv preprint
+arXiv:1803.08375.
+Ankile, L.L., Heggland, M.F., Krange, K., 2020. Deep convolutional neural networks: A
+survey of the foundations, selected improvements, and some current applications.
+arXiv preprint arXiv:2011.12960.
+
+Declaration of competing interest
+The authors declare that they have no known competing financial interests or personal relationships that could have appeared to
+influence the work reported in this paper.
+18
+
+Engineering Applications of Artificial Intelligence 135 (2024) 108685
+
+B. Deng et al.
+
+Nagumo, T., Takeuchi, K., Hase, T., Hayashi, Y., 2010a. Statistical characterization
+of trap position, energy, amplitude and time constants by RTN measurement of
+multiple individual traps. In: 2010 International Electron Devices Meeting. pp.
+28.3.1–28.3.4. http://dx.doi.org/10.1109/IEDM.2010.5703437.
+Nagumo, T., Takeuchi, K., Yokogawa, S., Imai, K., Hayashi, Y., 2010b. New analysis
+methods for comprehensive understanding of random telegraph noise. pp. 1–4.
+Pandey, V., Giri, V.K., 2016. High frequency noise removal from ECG using moving
+average filters. In: 2016 International Conference on Emerging Trends in Electrical
+Electronics & Sustainable Energy Systems. ICETEESES, pp. 191–195.
+Petrychuk, M., Zadorozhnyi, I., Kutovyi, Y., Karg, S., Riel, H., Vitusevich, S., 2019.
+Noise spectroscopy to study the 1D electron transport properties in InAs nanowires.
+Nanotechnology 30 (30), 305001.
+Popovic, N., Miljkovic, N., Djordjevic, O., Šekara, T., 2016. Artifact cancellation using
+median filter, moving average filter, and fractional derivatives in biomedical
+signals. In: Proceedings of International Conference on Fractional Differentiation
+and its Applications (ICFDA), July 18-20, Novi Sad, Serbia.
+Principato, F., Ferrante, G., 2007. 1/f noise decomposition in random telegraph signals
+using the wavelet transform. Phys. A 380, 75–97.
+Puglisi, F.M., Pavan, P., 2013. RTN analysis with FHMM as a tool for multi-trap
+characterization in HfOX RRAM. In: 2013 IEEE International Conference of Electron
+Devices and Solid-state Circuits. pp. 1–2.
+Puglisi, F.M., Pavan, P., 2014. Factorial hidden Markov model analysis of random
+telegraph noise in resistive random access memories. ECTI Trans. Electr. Eng.,
+Electron., Commun. 12 (1), 24–29.
+Rabiner, L., 1989. A tutorial on hidden Markov models and selected applications in
+speech recognition. Proc. IEEE 77 (2), 257–286.
+Ralls, K.S., Skocpol, W.J., Jackel, L.D., Howard, R.E., Fetter, L.A., Epworth, R.W., Tennant, D.M., 1984. Discrete resistance switching in submicrometer silicon inversion
+layers: Individual interface traps and low-frequency ( 𝑓1 ?) noise. Phys. Rev. Lett.
+52, 228–231.
+Remadna, I., Terrissa, L.S., Al Masry, Z., Zerhouni, N., 2023. RUL prediction using
+a fusion of attention-based convolutional variational AutoEncoder and ensemble
+learning classifier. IEEE Trans. Reliab. 72 (1), 106–124.
+Ribeiro, M., Rocha, P.R., Metcalfe, B., 2020. An ultra-sensitive biosensor to investigate
+Random Telegraph Noise in human breast cancer cells. In: Proceedings. Vol. 60,
+(1), MDPI, p. 27.
+Robitaille, M., Yang, H., Wang, L., Deng, B., Kim, N.Y., 2023. Deep neural network
+analysis models for complex random telegraph signals. Sci. Rep. 13 (1), 10403.
+Ronneberger, O., Fischer, P., Brox, T., 2015. U-net: Convolutional networks for biomedical image segmentation. In: Medical Image Computing and Computer-Assisted
+Intervention–MICCAI 2015: 18th International Conference, Munich, Germany,
+October 5-9, 2015, Proceedings, Part III. Vol. 18. Springer, pp. 234–241.
+Roy, M., Majumder, S., Halder, A., Biswas, U., 2023. ECG-NET: A deep LSTM
+autoencoder for detecting anomalous ECG. Eng. Appl. Artif. Intell. 124, 106484.
+Schuster, M., Paliwal, K., 1997. Bidirectional recurrent neural networks. IEEE Trans.
+Signal Process. 45 (11), 2673–2681. http://dx.doi.org/10.1109/78.650093.
+Shan, Z., Yang, J., Sanjuán, M.A., Wu, C., Liu, H., 2022. A novel adaptive moving
+average method for signal denoising in strong noise background. Eur. Phys. J. Plus
+137 (1), 50.
+Simoen, E., Claeys, C.L., 2016. Random Telegraph Signals in Semiconductor Devices.
+Vol. 357, IOP Publishing Bristol.
+Sonali, Singh, O., Sunkaria, R.K., 2013. ECG signal denoising based on Empirical Mode
+Decomposition and moving average filter. In: 2013 IEEE International Conference
+on Signal Processing, Computing and Control. ISPCC, pp. 1–6.
+Theodorsen, A., Garcia, O.E., Rypdal, M., 2017. Statistical properties of a filtered
+Poisson process with additive random noise: distributions, correlations and moment
+estimation. Phys. Scr. 92 (5), 054002.
+Vincent, P., Larochelle, H., Bengio, Y., Manzagol, P.-A., 2008. Extracting and composing robust features with denoising autoencoders. In: Proceedings of the 25th
+International Conference on Machine Learning. pp. 1096–1103.
+Vincent, P., Larochelle, H., Lajoie, I., Bengio, Y., Manzagol, P.-A., Bottou, L., 2010.
+Stacked denoising autoencoders: Learning useful representations in a deep network
+with a local denoising criterion. J. Mach. Learn. Res. 11 (12).
+Wang, Y., 1993. Spectrum of anomalous random telegraph noise. J. Appl. Phys. 74
+(12), 7609–7611.
+Wang, R., Guo, S., Zhang, Z., Zou, J., Mao, D., Huang, R., 2018. Complex random
+telegraph noise (RTN): What do we understand? In: 2018 IEEE International
+Symposium on the Physical and Failure Analysis of Integrated Circuits. IPFA, pp.
+1–7. http://dx.doi.org/10.1109/IPFA.2018.8452514.
+Yang, H., Robitaille, M., Chen, X., Elgabra, H., Wei, L., Kim, N.Y., 2022. Random
+telegraph noise of a 28-nm cryogenic MOSFET in the Coulomb blockade regime.
+IEEE Electron Device Lett. 43 (1), 5–8.
+Yuzhelevski, Y., Yuzhelevski, M., Jung, G., 2000. Random telegraph noise analysis in
+time domain. Rev. Sci. Instrum. 71 (4), 1681–1688.
+Zhang, J., Zhang, Z., Wang, R., Sun, Z., Zhang, Z., Guo, S., Huang, R., 2018.
+Comprehensive study on the ‘‘anomalous’’ complex RTN in advanced multi-fin bulk
+FinFET technology. In: 2018 IEEE International Electron Devices Meeting. IEDM,
+pp. 17.3.1–17.3.4. http://dx.doi.org/10.1109/IEDM.2018.8614646.
+
+Awano, H., Tsutsui, H., Ochi, H., Sato, T., 2013. Multi-trap RTN parameter extraction
+based on Bayesian inference. In: International Symposium on Quality Electronic
+Design. ISQED, pp. 597–602. http://dx.doi.org/10.1109/ISQED.2013.6523672.
+Bae, S.-H., Lee, J.-H., Kwon, H.-I., Ahn, J.-R., Om, J.-C., Park, C.H., Lee, J.-H., 2009.
+The 1∕𝑓 noise and random telegraph noise characteristics in floating-gate nand
+flash memories. IEEE Trans. Electron Devices 56 (8), 1624–1630.
+Chen, R., Wang, J., Yu, L.-C., Zhang, X., 2023. Decoupled variational autoencoder
+with interactive attention for affective text generation. Eng. Appl. Artif. Intell. 123,
+106447.
+Chiang, H.-T., Hsieh, Y.-Y., Fu, S.-W., Hung, K.-H., Tsao, Y., Chien, S.-Y., 2019. Noise
+reduction in ECG signals using fully convolutional denoising autoencoders. IEEE
+Access 7, 60806–60813.
+Choi, H.I., 2017. Autoencoders. In: Lectures on Machine Learning, Seoul National
+University, Lecture.
+Fan, S.-K.S., Hsu, C.-Y., Jen, C.-H., Chen, K.-L., Juan, L.-T., 2020. Defective wafer detection using a denoising autoencoder for semiconductor manufacturing processes.
+Adv. Eng. Inform. 46, 101166.
+Gao, L., Alibart, F., Strukov, D.B., 2012. Analog-input analog-weight dot-product operation with Ag/a-Si/Pt memristive devices. In: 2012 IEEE/IFIP 20th International
+Conference on VLSI and System-on-Chip. VLSI-SoC, pp. 88–93.
+Gauthier, O., Haendler, S., Scheer, P., Vernhet, A., Rafhay, Q., Theodorou, C., 2022.
+Enhanced statistical detection of random telegraph noise in frequency and time
+domain. Solid-State Electron. 194, 108320.
+Gilli, M., 1996. Computational Economic Systems: Models, Methods & Econometrics.
+Vol. 5, Springer Science & Business Media.
+Goiffon, V., Hopkinson, G.R., Magnan, P., Bernard, F., Rolland, G., Saint-Pé, O., 2009.
+Multilevel RTS in proton irradiated CMOS image sensors manufactured in a deep
+submicron technology. IEEE Trans. Nucl. Sci. 56 (4), 2132–2141.
+Gondara, L., 2016. Medical image denoising using convolutional denoising autoencoders. In: 2016 IEEE 16th International Conference on Data Mining Workshops.
+ICDMW, IEEE, pp. 241–246.
+Grozdić, Ð.T., Jovičić, S.T., Subotić, M., 2017. Whispered speech recognition using deep
+denoising autoencoder. Eng. Appl. Artif. Intell. (ISSN: 0952-1976) 59, 15–22.
+Guo, S., Wang, R., Mao, D., Wang, Y., Huang, R., 2017. Anomalous random telegraph
+noise in nanoscale transistors as direct evidence of two metastable states of oxide
+traps. Sci. Rep. 7, 6239.
+Han, S., Mao, H., Dally, W.J., 2015. Deep compression: Compressing deep neural
+networks with pruning, trained quantization and huffman coding. arXiv preprint
+arXiv:1510.00149.
+Hendrickson, B.W., 2019. DC-RTS Noise: Observation and Analysis (Ph.D. thesis).
+Portland State University.
+Hendrickson, B., Widenhorn, R., Blouke, M., Heidtmann, D., Bodegom, E., 2020.
+Wavelet analysis of RTS noise in CMOS image sensors irradiated with high-energy
+photons. IEEE Trans. Nucl. Sci. 67 (7), 1732–1737.
+Hida, T., Kuo, H.-H., Potthoff, J., Streit, L., 2013. White Noise: an Infinite Dimensional
+Calculus. Vol. 253, Springer Science & Business Media.
+Hung, K.K., Ko, P.K., Hu, C.-M., Cheng, Y.C., 1990. Random telegraph noise of
+deep-submicrometer MOSFET’s. IEEE Electr. Dev. Lett. 11 (2), 90–92.
+Kenfack, L.T., Tchoffo, M., Fouokeng, G.C., Fai, L.C., 2017. Dynamics of tripartite
+quantum correlations in mixed classical environments: the joint effects of the
+random telegraph and static noises. Int. J. Quantum Inf. 15 (05), 1750038.
+Kingma, D.P., Ba, J., 2014. Adam: A method for stochastic optimization. arXiv preprint
+arXiv:1412.6980.
+Kleinherbers, E., Stegmann, P., Kurzmann, A., Geller, M., Lorke, A., König, J., 2022.
+Pushing the limits in real-time measurements of quantum dynamics. Phys. Rev.
+Lett. 128 (8), 087701.
+Kogan, S., 1996. Electronic Noise and Fluctuations in Solids. Cambridge University
+Press, http://dx.doi.org/10.1017/CBO9780511551666.
+leCun Yann, Bengio, Y., Hinton, G., 2015. Deep learning. Nature 521 (7553), 436–444.
+Leudar, I., 1989. James L. McClelland, David Rumelhart and the PDP Research Group,
+Parallel distributed processing: explorations in the microstructure of cognition. Vol.
+1. Foundations. Vol. 2. Psychological and biological models. cambridge MA: M.I.T.
+Press, 1987. J. Child Lang. 16, 467–470.
+Li, M., Wang, R., Zou, J., Huang, R., 2013. Characterization of random telegraph noise
+in scaled high-𝜅/metal-gate MOSFETs with SiO2/HfO2 gate dielectrics. ECS Trans.
+52 (1), 941.
+Lucas, S., Oberlin, T., Goiffon, V., Le Mer, F., 2022. Automatic detection and correction
+of random telegraph signal artifacts in earth observation images. IEEE Geosci.
+Remote Sens. Lett. 19, 1–5.
+Magsi, H., Sodhro, A.H., Chachar, F.A., Abro, S.A.K., 2018. Analysis of signal noise
+reduction by using filters. In: 2018 International Conference on Computing,
+Mathematics and Engineering Technologies. ICoMET, pp. 1–6.
+Majumder, S., 2011. Random Telegraph Signal Noise in CMOS Image Sensor (CIS) and
+Use of a CIS in a Low-Cost Digital Microscope (Ph.D. thesis).
+Moshrefi, A., Aghababa, H., Shoaei, O., 2021. Employing the empirical mode
+decomposition to denoise the random telegraph noise. Int. J. Eng. 34 (1), 90–96.
+
+19
+
+
